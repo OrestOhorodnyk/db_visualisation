@@ -1,12 +1,9 @@
-FROM node:22-alpine
-
-# Copy uv binaries from the official Astral image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+FROM ghcr.io/astral-sh/uv:python3.12-alpine
 
 WORKDIR /app
 
-# Install Python 3 and Node.js CLI tools (@dbml/cli and @liam-hq/cli)
-RUN apk add --no-cache python3 && \
+# Install Node.js & npm for the @dbml/cli and @liam-hq/cli build tools
+RUN apk add --no-cache nodejs npm && \
     npm install -g --loglevel=error --no-fund --no-audit --no-update-notifier @dbml/cli @liam-hq/cli && \
     rm -rf /root/.npm
 
