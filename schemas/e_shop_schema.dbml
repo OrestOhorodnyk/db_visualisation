@@ -1,0 +1,127 @@
+// --- ENUMS ---
+
+Enum user_role {
+  customer [note: 'Standard store customer']
+  admin [note: 'System administrator with full access']
+  manager [note: 'Store manager handling catalog and orders']
+}
+
+Enum order_status {
+  pending [note: 'Order placed, awaiting payment confirmation']
+  paid [note: 'Payment received, ready for fulfillment']
+  processing [note: 'Order is being packed at the warehouse']
+  shipped [note: 'Handed over to shipping carrier']
+  delivered [note: 'Successfully delivered to customer']
+  cancelled [note: 'Order cancelled by customer or staff']
+}
+
+Enum payment_status {
+  pending [note: 'Awaiting payment gateway confirmation']
+  completed [note: 'Transaction successfully captured']
+  failed [note: 'Payment declined or errored']
+  refunded [note: 'Funds returned to customer']
+}
+
+Enum payment_method {
+  card [note: 'Online credit/debit card payment (Visa, MasterCard, Apple Pay)']
+  bank_transfer [note: 'Direct IBAN / wire bank transfer']
+  cash_on_delivery [note: 'Paid upon delivery at courier or pickup point']
+}
+
+// --- 1. USERS & ADDRESSES ---
+
+Table users {
+  id integer [pk, increment, note: 'Primary user identifier']
+  email varchar(255) [unique, not null, note: 'Login email address']
+  password_hash varchar(255) [not null, note: 'Bcrypt/Argon2 password hash']
+  first_name varchar(100) [not null, note: 'User first name']
+  last_name varchar(100) [not null, note: 'User last name']
+  phone varchar(20) [note: 'Contact phone number in E.164 format']
+  role user_role [not null, default: 'customer', note: 'Access role in the platform']
+  created_at timestamp [default: `now()`, note: 'Account registration timestamp']
+  updated_at timestamp [default: `now()`, note: 'Last profile update timestamp']
+
+  Note: 'Registered customer, manager, and administrator accounts'
+}
+
+Table user_addresses {
+  id integer [pk, increment, note: 'Primary address identifier']
+  user_id integer [not null, ref: > users.id, note: 'Owner of this address']
+  country varchar(100) [not null, default: 'Ukraine', note: 'Country name']
+  city varchar(100) [not null, note: 'City or settlement name']
+  street_address varchar(255) [not null, note: 'Street, building,apartment, or pickup branch']
+  postal_code varchar(20) [note: 'Postal / ZIP code']
+  is_default boolean [default: false, note: 'Whether this is the default shipping address for the user']
+
+  Note: 'Saved shipping and billing addresses for customers'
+}
+
+// --- 2. PRODUCT CATALOG ---
+
+Table categories {
+  id integer [pk, increment, note: 'Primary category identifier']
+  parent_id integer [ref: > categories.id, note: 'Parent category ID for hierarchical catalog tree (NULL for root)']
+  name varchar(150) [not null, note: 'Display name of the category']
+  slug varchar(150) [unique, not null, note: 'URL-friendly category slug']
+  description text [note: 'Category description shown on catalog page']
+
+  Note: 'Hierarchical product categories tree'
+}
+
+Table products {
+  id integer [pk, increment, note: 'Primary product identifier']
+  category_id integer [not null, ref: > categories.id, note: 'Primary catalog category']
+  sku varchar(50) [unique, not null, note: 'Unique stock keeping unit code']
+  name varchar(255) [not null, note: 'Product title']
+  slug varchar(255) [unique, not null, note: 'SEO-friendly URL slug']
+  description text [note: 'Detailed product specifications and marketing copy']
+  price decimal(10, 2) [not null, note: 'Current retail unit price']
+  stock_quantity integer [not null, default: 0, note: 'Available inventory count for online sale']
+  is_active boolean [not null, default: true, note: 'Whether the product is visible in the storefront']
+  created_at timestamp [default: `now()`, note: 'Product creation timestamp']
+  updated_at timestamp [default: `now()`, note: 'Last product update timestamp']
+
+  Note: 'Storefront product catalog with pricing and availability'
+}
+
+// --- 3. ORDERS & PAYMENTS ---
+
+Table orders {
+  id integer [pk, increment, note: 'Primary order identifier']
+  order_number varchar(50) [unique, not null, note: 'Customer-facing order code (e.g., ORD-2026-00142)']
+  user_id integer [not null, ref: > users.id, note: 'Customer who placed the order']
+  shipping_address_id integer [ref: > user_addresses.id, note: 'Selected delivery address']
+  status order_status [not null, default: 'pending', note: 'Current order lifecycle status']
+  total_amount decimal(10, 2) [not null, note: 'Final order total including items and shipping']
+  shipping_cost decimal(10, 2) [not null, default: 0.00, note: 'Delivery fee charged to the order']
+  customer_notes text [note: 'Optional delivery instructions from the customer']
+  created_at timestamp [default: `now()`, note: 'Order placement timestamp']
+  updated_at timestamp [default: `now()`, note: 'Last status change timestamp']
+
+  Note: 'Customer purchase orders header information'
+}
+
+Table order_items {
+  id integer [pk, increment, note: 'Primary order line item identifier']
+  order_id integer [not null, ref: > orders.id, note: 'Parent order reference']
+  product_id integer [not null, ref: > products.id, note: 'Purchased product reference']
+  quantity integer [not null, default: 1, note: 'Number of units purchased']
+  unit_price decimal(10, 2) [not null, note: 'Historical unit price locked at the moment of checkout']
+
+  Note: 'Individual line items belonging to a customer order'
+}
+
+Table payments {
+  id integer [pk, increment, note: 'Primary payment record identifier']
+  order_id integer [not null, ref: > orders.id, note: 'Order being paid for']
+  transaction_id varchar(255) [unique, note: 'External payment gateway transaction ID']
+  provider varchar(50) [note: 'Payment gateway name (e.g., Stripe, LiqPay, MonoPay)']
+  method payment_method [not null, note: 'Selected payment method']
+  status payment_status [not null, default: 'pending', note: 'Current payment processing status']
+  amount decimal(10, 2) [not null, note: 'Transaction amount']
+  currency char(3) [not null, default: 'UAH', note: 'ISO 4217 currency code']
+  paid_at timestamp [note: 'Timestamp when payment was successfully captured']
+  created_at timestamp [default: `now()`, note: 'Payment initiation timestamp']
+
+  Note: 'Payment transactions and gateway statuses for orders'
+}

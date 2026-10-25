@@ -1,0 +1,236 @@
+// --- ENUMS ---
+
+Enum zone_type {
+  receiving [note: 'Goods receiving area (loading dock)']
+  bulk_storage [note: 'Pallet (long-term) bulk storage area']
+  picking [note: 'Piece picking (order fulfillment) area']
+  cold_storage [note: 'Cold storage chamber']
+  quarantine [note: 'Defective goods and quarantine area']
+  shipping [note: 'Dispatch and shipping area']
+}
+
+Enum unit_of_measure {
+  pcs [note: 'Pieces']
+  box [note: 'Boxes']
+  pallet [note: 'Pallets']
+  kg [note: 'Kilograms']
+  liter [note: 'Liters']
+}
+
+Enum movement_type {
+  inbound_receipt [note: 'Inbound receipt from supplier']
+  putaway [note: 'Putaway from receiving zone to storage racks']
+  internal_transfer [note: 'Internal transfer between bins or warehouses']
+  replenishment [note: 'Replenishment of picking zone from bulk storage']
+  outbound_pick [note: 'Outbound pick for customer order']
+  adjustment_plus [note: 'Positive inventory adjustment (surplus found during stocktake)']
+  adjustment_minus [note: 'Negative inventory adjustment (shortage or damage write-off)']
+}
+
+Enum document_status {
+  draft [note: 'Draft']
+  in_progress [note: 'In progress (receiving / picking)']
+  completed [note: 'Completed and posted to inventory balances']
+  cancelled [note: 'Cancelled']
+}
+
+// --- 1. WAREHOUSE TOPOLOGY (BIN LOCATION SYSTEM) ---
+
+Table warehouses {
+  id integer [pk, increment, note: 'Primary warehouse identifier']
+  code varchar(20) [unique, not null, note: 'Short facility code, e.g., WH-LWO-01']
+  name varchar(150) [not null, note: 'Human-readable warehouse name']
+  address varchar(255) [not null, note: 'Physical street address of the facility']
+  is_active boolean [not null, default: true, note: 'Whether the warehouse is currently operational']
+  created_at timestamp [default: `now()`, note: 'Record creation timestamp']
+
+  Note: 'Physical warehouse facilities and distribution centers'
+}
+
+Table warehouse_zones {
+  id integer [pk, increment, note: 'Primary zone identifier']
+  warehouse_id integer [not null, ref: > warehouses.id, note: 'Parent warehouse facility']
+  code varchar(20) [not null, note: 'Zone code within the warehouse, e.g., ZONE-A, COLD-1']
+  name varchar(100) [not null, note: 'Descriptive zone name']
+  type zone_type [not null, note: 'Functional purpose and temperature regime of the zone']
+
+  indexes {
+    (warehouse_id, code) [unique]
+  }
+
+  Note: 'Functional areas inside a warehouse (receiving docks, bulk storage, picking, cold chambers)'
+}
+
+Table storage_locations {
+  id integer [pk, increment, note: 'Primary storage bin identifier']
+  zone_id integer [not null, ref: > warehouse_zones.id, note: 'Warehouse zone containing this bin']
+  location_code varchar(50) [unique, not null, note: 'Scannable bin barcode: A-01-03-02 (Aisle-Rack-Level-Bin)']
+  aisle varchar(10) [note: 'Aisle number or letter']
+  rack varchar(10) [note: 'Rack identifier']
+  level varchar(10) [note: 'Vertical shelf level']
+  bin varchar(10) [note: 'Slot / bin position on the shelf']
+  max_weight_kg decimal(10, 2) [note: 'Maximum allowed load weight in kg']
+  max_volume_m3 decimal(10, 4) [note: 'Maximum usable volume in cubic meters']
+  is_blocked boolean [not null, default: false, note: 'Temporarily blocked for stocktake or rack maintenance']
+
+  Note: 'Individual addressable storage bins and pallet slots'
+}
+
+// --- 2. PRODUCT CATALOG & LOTS ---
+
+Table items {
+  id integer [pk, increment, note: 'Primary item identifier']
+  sku varchar(50) [unique, not null, note: 'Internal stock keeping unit code']
+  barcode varchar(50) [unique, note: 'Manufacturer EAN-13 / UPC barcode']
+  name varchar(255) [not null, note: 'Full item name']
+  uom unit_of_measure [not null, default: 'pcs', note: 'Base unit of measure for stock tracking']
+  gross_weight_kg decimal(10, 3) [note: 'Unit gross weight in kg (used for bin capacity checks)']
+  volume_m3 decimal(10, 6) [note: 'Unit volume in m3 (used for bin capacity checks)']
+  min_stock_level integer [not null, default: 0, note: 'Minimum safety stock threshold (reorder point)']
+  is_lot_tracked boolean [not null, default: false, note: 'Requires batch/lot and expiration date tracking']
+  created_at timestamp [default: `now()`, note: 'Item creation timestamp']
+
+  Note: 'Master catalog of physical goods managed in the warehouse'
+}
+
+Table item_lots {
+  id integer [pk, increment, note: 'Primary lot identifier']
+  item_id integer [not null, ref: > items.id, note: 'Item to which this lot belongs']
+  lot_number varchar(100) [not null, note: 'Manufacturer batch, lot, or serial code']
+  manufactured_date date [note: 'Date of manufacture']
+  expiration_date date [note: 'Sell-by / expiration date used for FEFO picking rules']
+  created_at timestamp [default: `now()`, note: 'Lot registration timestamp']
+
+  indexes {
+    (item_id, lot_number) [unique]
+    expiration_date
+  }
+
+  Note: 'Batch and lot tracking records with expiration dates for FEFO/FIFO'
+}
+
+// --- 3. INVENTORY BALANCES ---
+
+Table inventory_balances {
+  id integer [pk, increment, note: 'Primary balance record identifier']
+  location_id integer [not null, ref: > storage_locations.id, note: 'Storage bin where stock is located']
+  item_id integer [not null, ref: > items.id, note: 'Stored item reference']
+  lot_id integer [ref: > item_lots.id, note: 'Specific batch/lot (NULL if item is not lot-tracked)']
+  quantity_on_hand decimal(12, 3) [not null, default: 0, note: 'Current physical quantity present in the bin']
+  quantity_allocated decimal(12, 3) [not null, default: 0, note: 'Quantity soft-reserved for active outbound picking tasks']
+  updated_at timestamp [default: `now()`, note: 'Timestamp of last stock balance update']
+
+  indexes {
+    (location_id, item_id, lot_id) [unique, name: 'idx_unique_stock_record']
+    item_id
+  }
+
+  Note: 'Real-time snapshot of stock quantities per storage bin and lot'
+}
+
+// --- 4. INBOUND & OUTBOUND DOCUMENTS ---
+
+Table suppliers {
+  id integer [pk, increment, note: 'Primary supplier identifier']
+  name varchar(200) [not null, note: 'Legal company name of the vendor']
+  tax_id varchar(50) [unique, note: 'Company tax identification / VAT number']
+  contact_email varchar(150) [note: 'Account manager or logistics email']
+  phone varchar(30) [note: 'Supplier contact phone number']
+
+  Note: 'External vendors and manufacturers supplying goods to the warehouse'
+}
+
+Table inbound_shipments {
+  id integer [pk, increment, note: 'Primary inbound shipment identifier']
+  receipt_number varchar(50) [unique, not null, note: 'Inbound receipt / Advance Shipping Notice (ASN) number']
+  warehouse_id integer [not null, ref: > warehouses.id, note: 'Destination warehouse receiving the goods']
+  supplier_id integer [not null, ref: > suppliers.id, note: 'Supplier sending the shipment']
+  status document_status [not null, default: 'draft', note: 'Current receiving workflow status']
+  expected_at timestamp [note: 'Scheduled truck arrival timestamp at loading dock']
+  received_at timestamp [note: 'Timestamp when receiving was finalized']
+  created_at timestamp [default: `now()`, note: 'Document creation timestamp']
+
+  Note: 'Inbound deliveries (ASNs) arriving from suppliers'
+}
+
+Table inbound_shipment_lines {
+  id integer [pk, increment, note: 'Primary inbound line identifier']
+  shipment_id integer [not null, ref: > inbound_shipments.id, note: 'Parent inbound shipment document']
+  item_id integer [not null, ref: > items.id, note: 'Expected item reference']
+  lot_id integer [ref: > item_lots.id, note: 'Assigned batch/lot upon receiving']
+  expected_qty decimal(12, 3) [not null, note: 'Quantity declared in supplier shipping documents']
+  received_qty decimal(12, 3) [not null, default: 0, note: 'Actual quantity verified and scanned at receiving dock']
+
+  Note: 'Line items and quantities for inbound supplier shipments'
+}
+
+Table outbound_orders {
+  id integer [pk, increment, note: 'Primary outbound order identifier']
+  order_number varchar(50) [unique, not null, note: 'Warehouse outbound wave / order number']
+  warehouse_id integer [not null, ref: > warehouses.id, note: 'Fulfillment warehouse']
+  external_order_ref varchar(50) [note: 'Customer order ID in external e-shop or ERP system']
+  status document_status [not null, default: 'draft', note: 'Fulfillment status (draft, picking, completed)']
+  priority integer [not null, default: 5, note: 'Dispatch priority (1 = urgent same-day, 5 = standard)']
+  shipped_at timestamp [note: 'Timestamp when order left the shipping dock']
+  created_at timestamp [default: `now()`, note: 'Order import timestamp']
+
+  Note: 'Outbound fulfillment orders to be picked, packed, and shipped'
+}
+
+Table outbound_order_lines {
+  id integer [pk, increment, note: 'Primary outbound line identifier']
+  outbound_order_id integer [not null, ref: > outbound_orders.id, note: 'Parent outbound order']
+  item_id integer [not null, ref: > items.id, note: 'Item requested for shipment']
+  requested_qty decimal(12, 3) [not null, note: 'Quantity ordered by customer']
+  allocated_qty decimal(12, 3) [not null, default: 0, note: 'Quantity reserved in specific bins']
+  picked_qty decimal(12, 3) [not null, default: 0, note: 'Actual quantity picked by warehouse staff']
+
+  Note: 'Individual items and picking progress for outbound orders'
+}
+
+// --- 5. STOCK MOVEMENT LEDGER & ADJUSTMENTS ---
+
+Table stock_movements {
+  id bigint [pk, increment, note: 'Primary ledger transaction ID']
+  item_id integer [not null, ref: > items.id, note: 'Moved item reference']
+  lot_id integer [ref: > item_lots.id, note: 'Moved batch/lot reference']
+  from_location_id integer [ref: > storage_locations.id, note: 'Source storage bin (NULL for external inbound receipts)']
+  to_location_id integer [ref: > storage_locations.id, note: 'Destination storage bin (NULL for outbound shipping or write-offs)']
+  type movement_type [not null, note: 'Classification of inventory movement']
+  quantity decimal(12, 3) [not null, note: 'Moved quantity (always positive; direction is set by from/to bins)']
+  reference_doc varchar(100) [note: 'Source document number (ASN, outbound order, stocktake sheet)']
+  performed_by varchar(100) [not null, note: 'Warehouse worker or RF barcode scanner ID']
+  created_at timestamp [not null, default: `now()`, note: 'Exact movement execution timestamp']
+
+  indexes {
+    item_id
+    from_location_id
+    to_location_id
+    created_at
+  }
+
+  Note: 'Immutable audit ledger recording every physical movement and adjustment of stock'
+}
+
+// --- TABLE GROUPS ---
+
+TableGroup topology {
+  warehouses
+  warehouse_zones
+  storage_locations
+}
+
+TableGroup catalog_and_lots {
+  items
+  item_lots
+  inventory_balances
+}
+
+TableGroup operations {
+  suppliers
+  inbound_shipments
+  inbound_shipment_lines
+  outbound_orders
+  outbound_order_lines
+  stock_movements
+}
