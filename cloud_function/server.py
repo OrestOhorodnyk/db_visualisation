@@ -27,7 +27,14 @@ DIST_ROOT = Path("/tmp/liam-builds")
 PREBUILT_ROOT = Path("/app/dist-prebuilt")
 
 # Git configuration for dynamically fetching schemas in GCP Cloud Run
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "")  # e.g., "owner/repo"
+GITHUB_REPO = (
+    os.environ.get("GITHUB_REPO", "")
+    .strip()
+    .removeprefix("https://github.com/")
+    .removeprefix("http://github.com/")
+    .removesuffix(".git")
+    .strip("/")
+)  # e.g., "OrestOhorodnyk/db_visualisation"
 GITLAB_PROJECT_ID = os.environ.get("GITLAB_PROJECT_ID", "")  # e.g., "123456" or "group/project"
 GITLAB_URL = os.environ.get("GITLAB_URL", "https://gitlab.com").rstrip("/")
 GIT_RAW_URL = os.environ.get("GIT_RAW_URL", "")  # URL template: https://.../raw/{branch}/{file}
