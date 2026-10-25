@@ -306,16 +306,17 @@ async def ensure_liam_build(
 
         try:
             tmp_dbml_path = tmp_work_dir / "schema.dbml"
-            tmp_sql_path = tmp_work_dir / "schema.sql"
+            tmp_tbls_path = tmp_work_dir / "schema.tbls.json"
             tmp_dist_dir = tmp_work_dir / "dist"
+            converter_script = Path(__file__).resolve().parent / "dbml_to_tbls.js"
 
             tmp_dbml_path.write_text(dbml_content, encoding="utf-8")
 
             rc, out, err = await run_cli_command(
-                ["dbml2sql", "schema.dbml", "--postgres", "-o", "schema.sql"],
+                ["node", str(converter_script), "schema.dbml", "schema.tbls.json"],
                 cwd=tmp_work_dir,
             )
-            if rc != 0 or not tmp_sql_path.is_file():
+            if rc != 0 or not tmp_tbls_path.is_file():
                 raise RuntimeError(
                     f'DBML syntax error in "{file_path}":\n{out}\n{err}'.strip()
                 )
@@ -326,9 +327,9 @@ async def ensure_liam_build(
                     "erd",
                     "build",
                     "--input",
-                    "schema.sql",
+                    "schema.tbls.json",
                     "--format",
-                    "postgres",
+                    "tbls",
                     "--output-dir",
                     str(tmp_dist_dir),
                 ],

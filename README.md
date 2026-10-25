@@ -6,14 +6,14 @@ An automated **Docs-as-Code** workflow for designing, versioning, and visualizin
 sequenceDiagram
     participant Dev as VS Code
     participant Git as GitHub / GitLab (stores .dbml only)
-    participant GCR as GCP Cloud Run (server.py + dbml2sql + Liam CLI)
+    participant GCR as GCP Cloud Run (server.py + dbml_to_tbls.js + Liam CLI)
     participant Conf as Confluence <iframe>
 
     Dev->>Git: 1. Edit schemas/warehouse.dbml & git push
     Conf->>GCR: 2. GET /?schema=warehouse&showMode=ALL_FIELDS
     GCR->>Git: 3. Fetch raw schemas/warehouse.dbml via Git API (if GITHUB_REPO is set)
     Git-->>GCR: Return raw .dbml text
-    Note over GCR: 4. Compare SHA-256 hash of .dbml<br/>If changed: run dbml2sql + liam erd build<br/>inside Cloud Run to generate schema.json
+    Note over GCR: 4. Compare SHA-256 hash of .dbml<br/>If changed: convert .dbml -> tbls JSON + liam erd build<br/>inside Cloud Run to generate schema.json
     GCR-->>Conf: 5. Serve interactive Liam ERD SPA + schema.json
 ```
 
@@ -23,9 +23,9 @@ sequenceDiagram
 
 | Tool | License | Commercial Use | Role in Project |
 | :--- | :--- | :--- | :--- |
-| **[DBML Specification](https://dbml.dbdiagram.io/)** | **Apache-2.0** | ✅ Free | Declarative, human-readable DSL for defining database tables, columns, enums, relationships, indexes, table groups, and documentation notes (`schemas/*.dbml`). |
-| **[`@dbml/cli` (`dbml2sql`)](https://github.com/holistics/dbml)** | **Apache-2.0** | ✅ Free | Open-source CLI that converts `.dbml` files into PostgreSQL DDL (`CREATE TABLE`, `ALTER TABLE ... ADD FOREIGN KEY`, `COMMENT ON TABLE`, `COMMENT ON COLUMN`). |
-| **[Liam ERD (`@liam-hq/cli`)](https://github.com/liam-hq/liam)** | **Apache-2.0** | ✅ Free | Open-source generator that builds an interactive web-based Entity-Relationship Diagram (SPA) from the generated PostgreSQL DDL, featuring panning, zooming, search, relationship highlighting, and field filtering. |
+| **[DBML Specification](https://dbml.dbdiagram.io/)** | **Apache-2.0** | ✅ Free | Database-agnostic DSL for defining tables, columns, enums, relationships, indexes, and documentation notes (`schemas/*.dbml`) across **Snowflake**, PostgreSQL, BigQuery, etc. |
+| **[`@dbml/core` + `dbml_to_tbls.js`](https://github.com/holistics/dbml)** | **Apache-2.0** | ✅ Free | Parses `.dbml` files directly into `tbls` JSON format (`--format tbls`), preserving 100% of **Snowflake** (`VARIANT`, `OBJECT`, `ARRAY`, `NUMBER(38,0)`, `TIMESTAMP_NTZ`) and SQL data types verbatim. |
+| **[Liam ERD (`@liam-hq/cli`)](https://github.com/liam-hq/liam)** | **Apache-2.0** | ✅ Free | Open-source generator that builds an interactive web-based Entity-Relationship Diagram (SPA) from the generated `tbls` JSON schema. |
 | **[Python 3](https://www.python.org/) + [FastAPI](https://fastapi.tiangolo.com/)** | **PSF / MIT** | ✅ Free | Asynchronous Python web framework (`cloud_function/server.py`) powered by **Uvicorn** (BSD-3-Clause) and **HTTPX** (BSD-3-Clause) that dynamically fetches `.dbml` files from Git, caches builds by SHA-256 hash, isolates multiple schemas across Confluence `<iframe>` embeds, and injects hover tooltips. |
 | **[`uv` (`ghcr.io/astral-sh/uv:python3.12-alpine`)](https://docs.astral.sh/uv/)** | **Apache-2.0 / MIT** | ✅ Free | Base container image providing pinned Python 3.12 and high-performance `uv` dependency management (`pyproject.toml` & `uv.lock`). |
 | **[Node.js (`nodejs` / `npm` on Alpine)](https://nodejs.org/)** | **MIT** | ✅ Free | Runtime inside the container used to execute the `@dbml/cli` and `@liam-hq/cli` CLI tools. |
@@ -55,6 +55,7 @@ db_visualisation/
 ├── cloud_function/
 │   ├── docker/
 │   │   └── Dockerfile           # Production & local Docker image definition
+│   ├── dbml_to_tbls.js          # Direct DBML -> tbls JSON converter (Snowflake/SQL type-preserving)
 │   ├── pyproject.toml           # Python project metadata & dependencies (managed by uv)
 │   ├── uv.lock                  # Reproducible dependency lockfile
 │   └── server.py                # Async multi-schema FastAPI server
