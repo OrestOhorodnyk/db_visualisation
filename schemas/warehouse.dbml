@@ -212,22 +212,6 @@ Table stock_movements {
   Note: 'Immutable audit ledger recording every physical movement and adjustment of stock'
 }
 
-Table cycle_counts {
-  id integer [pk, increment, note: 'Primary cycle count audit record identifier']
-  warehouse_id integer [not null, ref: > warehouses.id, note: 'Warehouse where the stocktake is performed']
-  location_id integer [not null, ref: > storage_locations.id, note: 'Audited storage bin']
-  item_id integer [not null, ref: > items.id, note: 'Counted item reference']
-  lot_id integer [ref: > item_lots.id, note: 'Counted batch/lot reference (if applicable)']
-  status document_status [not null, default: 'draft', note: 'Audit status (draft, in_progress, completed)']
-  system_qty decimal(12, 3) [not null, note: 'Expected system quantity before physical count']
-  counted_qty decimal(12, 3) [note: 'Actual physical quantity counted by operator']
-  counted_by varchar(100) [note: 'Warehouse auditor / operator ID']
-  counted_at timestamp [note: 'Timestamp when physical count was recorded']
-  created_at timestamp [not null, default: `now()`, note: 'Audit task creation timestamp']
-
-  Note: 'Inventory stocktake and cycle counting records used to reconcile bin balances'
-}
-
 // --- TABLE GROUPS ---
 
 TableGroup topology {
@@ -249,5 +233,4 @@ TableGroup operations {
   outbound_orders
   outbound_order_lines
   stock_movements
-  cycle_counts
 }
