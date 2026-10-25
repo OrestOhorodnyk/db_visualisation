@@ -6,7 +6,7 @@ An automated **Docs-as-Code** workflow for designing, versioning, and visualizin
 sequenceDiagram
     participant Dev as VS Code
     participant Git as GitHub / GitLab (stores .dbml only)
-    participant GCR as GCP Cloud Run (server.js + dbml2sql + Liam CLI)
+    participant GCR as GCP Cloud Run (server.py + dbml2sql + Liam CLI)
     participant Conf as Confluence <iframe>
 
     Dev->>Git: 1. Edit schemas/warehouse.dbml & git push
@@ -26,7 +26,9 @@ sequenceDiagram
 | **[DBML Specification](https://dbml.dbdiagram.io/)** | **Apache-2.0** | ✅ Free | Declarative, human-readable DSL for defining database tables, columns, enums, relationships, indexes, table groups, and documentation notes (`schemas/*.dbml`). |
 | **[`@dbml/cli` (`dbml2sql`)](https://github.com/holistics/dbml)** | **Apache-2.0** | ✅ Free | Open-source CLI that converts `.dbml` files into PostgreSQL DDL (`CREATE TABLE`, `ALTER TABLE ... ADD FOREIGN KEY`, `COMMENT ON TABLE`, `COMMENT ON COLUMN`). |
 | **[Liam ERD (`@liam-hq/cli`)](https://github.com/liam-hq/liam)** | **Apache-2.0** | ✅ Free | Open-source generator that builds an interactive web-based Entity-Relationship Diagram (SPA) from the generated PostgreSQL DDL, featuring panning, zooming, search, relationship highlighting, and field filtering. |
-| **[Node.js 22 (`node:22-alpine`)](https://nodejs.org/)** | **MIT** | ✅ Free | Runtime for `cloud_function/server.js` — a zero-dependency HTTP server that dynamically fetches `.dbml` files from Git, caches builds by SHA-256 hash, isolates multiple schemas across Confluence `<iframe>` embeds, and injects hover tooltips. |
+| **[Python 3](https://www.python.org/) + [FastAPI](https://fastapi.tiangolo.com/)** | **PSF / MIT** | ✅ Free | Asynchronous Python web framework (`cloud_function/server.py`) powered by **Uvicorn** (BSD-3-Clause) and **HTTPX** (BSD-3-Clause) that dynamically fetches `.dbml` files from Git, caches builds by SHA-256 hash, isolates multiple schemas across Confluence `<iframe>` embeds, and injects hover tooltips. |
+| **[`uv` (Astral)](https://docs.astral.sh/uv/)** | **Apache-2.0 / MIT** | ✅ Free | High-performance Python package and dependency manager (`pyproject.toml` & `uv.lock`). |
+| **[Node.js 22 (`node:22-alpine`)](https://nodejs.org/)** | **MIT** | ✅ Free | Container base image providing the Node.js runtime required by `@dbml/cli` and `@liam-hq/cli`. |
 | **VS Code Extensions** (`bocovo.dbml-erd-visualizer`, `matt-meyers.vscode-dbml`) | **MIT** | ✅ Free | Local IDE syntax highlighting and live DBML diagram preview during schema authoring. |
 | **Docker Engine / CLI & Buildx** | **Apache-2.0** | ✅ Free* | Container build and runtime tools (*see note below on Docker Desktop vs. open-source runtimes*). |
 | **GCP Cloud Run & Cloud Build** | **Cloud Service (Pay-as-you-go)** | ✅ Free Tier / Paid | Serverless container runtime providing an HTTPS endpoint (`https://*.a.run.app`) that scales to zero when idle. |
@@ -53,7 +55,9 @@ db_visualisation/
 ├── cloud_function/
 │   ├── docker/
 │   │   └── Dockerfile           # Production & local Docker image definition
-│   └── server.js                # Dynamic multi-schema build & static server
+│   ├── pyproject.toml           # Python project metadata & dependencies (managed by uv)
+│   ├── uv.lock                  # Reproducible dependency lockfile
+│   └── server.py                # Async multi-schema FastAPI server
 ├── .dockerignore
 └── README.md
 ```
@@ -82,12 +86,12 @@ docker build -f cloud_function/docker/Dockerfile -t erd-liam .
 > ```
 
 ### 3. Run Locally with Live Reload on Refresh
-Mount the local `schemas/` folder and `server.js` into the container so any edits saved in VS Code (`Cmd + S`) take effect immediately when you refresh the browser (no container restart needed):
+Mount the local `schemas/` folder and `server.py` into the container so any edits saved in VS Code (`Cmd + S`) take effect immediately when you refresh the browser (no container restart needed):
 
 ```bash
 docker run --rm -p 3002:8080 \
   -v "$(pwd)/schemas:/app/schemas:ro" \
-  -v "$(pwd)/cloud_function/server.js:/app/cloud_function/server.js:ro" \
+  -v "$(pwd)/cloud_function/server.py:/app/cloud_function/server.py:ro" \
   erd-liam
 ```
 
@@ -123,7 +127,7 @@ docker run --rm -p 3002:8080 \
 
 ## Deploying to GCP Cloud Run (GitHub & GitLab Integration)
 
-Because [`server.js`](file:///Users/orestohorodnyk/Documents/work_files/db_visualisation/cloud_function/server.js) dynamically fetches `.dbml` files from your Git repository on the fly, **you only need to deploy the service to GCP Cloud Run once**. Subsequent changes pushed to `schemas/*.dbml` in Git will automatically render in Confluence without redeploying the container.
+Because [`server.py`](file:///Users/orestohorodnyk/Documents/work_files/db_visualisation/cloud_function/server.py) dynamically fetches `.dbml` files from your Git repository on the fly, **you only need to deploy the service to GCP Cloud Run once**. Subsequent changes pushed to `schemas/*.dbml` in Git will automatically render in Confluence without redeploying the container.
 
 ### Supported Git Providers
 
@@ -194,7 +198,7 @@ gcloud run deploy erd-liam \
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `PORT` | `8080` | HTTP port listened on by `server.js`. |
+| `PORT` | `8080` | HTTP port listened on by `server.py`. |
 | `SCHEMAS_DIR` | `schemas` | Folder path in the repository containing `.dbml` files. |
 | `GITHUB_REPO` | `""` | GitHub repository in `owner/repo` format for dynamic fetching. |
 | `GITLAB_PROJECT_ID` | `""` | GitLab project ID or URL-encoded path (`group/project`). |

@@ -1,14 +1,23 @@
 FROM node:22-alpine
 
+# Copy uv binaries from the official Astral image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-# Install CLI tools once during image build for fast startup in Cloud Run
-RUN npm install -g --loglevel=error --no-fund --no-audit --no-update-notifier @dbml/cli @liam-hq/cli && \
+# Install Python 3 and Node.js CLI tools (@dbml/cli and @liam-hq/cli)
+RUN apk add --no-cache python3 && \
+    npm install -g --loglevel=error --no-fund --no-audit --no-update-notifier @dbml/cli @liam-hq/cli && \
     rm -rf /root/.npm
 
-# Copy all schemas and the server script
+# Install Python dependencies using uv from pyproject.toml and uv.lock
+COPY cloud_function/pyproject.toml cloud_function/uv.lock /app/cloud_function/
+RUN uv sync --frozen --no-dev --no-install-project --directory /app/cloud_function && \
+    uv cache clean
+
+# Copy all schemas and the FastAPI server script
 COPY schemas/ /app/schemas/
-COPY cloud_function/server.js /app/cloud_function/server.js
+COPY cloud_function/server.py /app/cloud_function/server.py
 
 # Pre-build all schemas from schemas/ directory for instant cold start in Cloud Run
 RUN mkdir -p /app/dist-prebuilt && \
@@ -24,6 +33,7 @@ RUN mkdir -p /app/dist-prebuilt && \
 
 ENV PORT=8080
 ENV LOCAL_ROOT_DIR=/app
+ENV PATH="/app/cloud_function/.venv/bin:$PATH"
 EXPOSE 8080
 
-CMD ["node", "/app/cloud_function/server.js"]
+CMD ["python", "-u", "/app/cloud_function/server.py"]
