@@ -4,17 +4,17 @@ An automated **Docs-as-Code** workflow for designing, versioning, and visualizin
 
 ```mermaid
 sequenceDiagram
-    participant Dev as VS Code (schemas/*.dbml)
-    participant Git as Git Repository
-    participant GCR as GCP Cloud Run (server.js + Liam ERD)
+    participant Dev as VS Code
+    participant Git as GitHub / GitLab (stores .dbml only)
+    participant GCR as GCP Cloud Run (server.js + dbml2sql + Liam CLI)
     participant Conf as Confluence <iframe>
 
-    Dev->>Git: Edit .dbml & git push
-    Conf->>GCR: GET /?schema=warehouse&showMode=ALL_FIELDS
-    GCR->>Git: Fetch latest schemas/warehouse.dbml (via Git API)
-    Git-->>GCR: Raw .dbml content
-    Note over GCR: Compare SHA-256 hash<br/>Rebuild via dbml2sql + Liam ERD if changed
-    GCR-->>Conf: Interactive ERD SPA + Hover Tooltips
+    Dev->>Git: 1. Edit schemas/warehouse.dbml & git push
+    Conf->>GCR: 2. GET /?schema=warehouse&showMode=ALL_FIELDS
+    GCR->>Git: 3. Fetch raw schemas/warehouse.dbml via Git API (if GITHUB_REPO is set)
+    Git-->>GCR: Return raw .dbml text
+    Note over GCR: 4. Compare SHA-256 hash of .dbml<br/>If changed: run dbml2sql + liam erd build<br/>inside Cloud Run to generate schema.json
+    GCR-->>Conf: 5. Serve interactive Liam ERD SPA + schema.json
 ```
 
 ---
@@ -121,9 +121,23 @@ docker run --rm -p 3002:8080 \
 
 ---
 
-## Deploying to GCP Cloud Run
+## Deploying to GCP Cloud Run (GitHub & GitLab Integration)
 
-Because the server dynamically fetches `.dbml` files from your Git repository on the fly, **you only need to deploy the service to GCP Cloud Run once**. Subsequent changes pushed to `schemas/*.dbml` in Git will automatically render in Confluence without redeploying the container.
+Because [`server.js`](file:///Users/orestohorodnyk/Documents/work_files/db_visualisation/cloud_function/server.js) dynamically fetches `.dbml` files from your Git repository on the fly, **you only need to deploy the service to GCP Cloud Run once**. Subsequent changes pushed to `schemas/*.dbml` in Git will automatically render in Confluence without redeploying the container.
+
+### Supported Git Providers
+
+1. **GitLab (GitLab.com & Self-Hosted GitLab Instances):**
+   * Uses the official **GitLab REST API v4**:
+     * Lists available schemas via `GET {GITLAB_URL}/api/v4/projects/{GITLAB_PROJECT_ID}/repository/tree?path=schemas&ref={branch}`
+     * Fetches raw `.dbml` files via `GET {GITLAB_URL}/api/v4/projects/{GITLAB_PROJECT_ID}/repository/files/{file}/raw?ref={branch}`
+   * **Token Setup:** In GitLab, navigate to **Settings → Access Tokens** (Project Access Token) or **User Settings → Personal Access Tokens** and create a token with the **`read_api`** (or `read_repository`) scope and **Reporter / Viewer** role.
+   * **Project Identifier (`GITLAB_PROJECT_ID`):** Supports either the numeric Project ID (e.g., `5829104`) or the namespace/project path (e.g., `my-group/db-visualisation`).
+   * **Self-Hosted GitLab (`GITLAB_URL`):** Defaults to `https://gitlab.com`. Set `GITLAB_URL=https://gitlab.your-company.com` for internal/self-managed GitLab servers.
+
+2. **GitHub (GitHub.com):**
+   * Uses the **GitHub REST API v3** (`GET https://api.github.com/repos/{GITHUB_REPO}/contents/{file}?ref={branch}`).
+   * **Token Setup:** Create a Fine-Grained Personal Access Token with **Contents: Read-only** permission for your repository.
 
 ### Step 1. Build and Push the Image with Cloud Build
 Run from the project root directory (replace `YOUR_GCP_PROJECT_ID` and `YOUR_REGION`, e.g., `europe-west1`):
@@ -142,7 +156,28 @@ EOF
 
 ### Step 2. Deploy the Cloud Run Service
 
-#### Option A: Connect to a GitHub Repository
+#### Option A: Connect to a GitLab Repository (GitLab.com or Self-Hosted)
+```bash
+gcloud run deploy erd-liam \
+  --image gcr.io/YOUR_GCP_PROJECT_ID/erd-liam:latest \
+  --region europe-west1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --memory 512Mi \
+  --set-env-vars="GITLAB_PROJECT_ID=my-group/db-visualisation,GITLAB_URL=https://gitlab.com,GIT_BRANCH=main,SCHEMAS_DIR=schemas,GIT_TOKEN=glpat_YOUR_GITLAB_PAT,ACCESS_KEY=YOUR_CONFLUENCE_SECRET_KEY"
+```
+
+*(To test GitLab fetching locally with Docker before deploying to GCP):*
+```bash
+docker run --rm -p 3002:8080 \
+  -e GITLAB_PROJECT_ID="my-group/db-visualisation" \
+  -e GITLAB_URL="https://gitlab.com" \
+  -e GIT_TOKEN="glpat_YOUR_GITLAB_PAT" \
+  -e GIT_BRANCH="main" \
+  erd-liam
+```
+
+#### Option B: Connect to a GitHub Repository
 ```bash
 gcloud run deploy erd-liam \
   --image gcr.io/YOUR_GCP_PROJECT_ID/erd-liam:latest \
@@ -151,17 +186,6 @@ gcloud run deploy erd-liam \
   --allow-unauthenticated \
   --memory 512Mi \
   --set-env-vars="GITHUB_REPO=YOUR_ORG/YOUR_REPO,GIT_BRANCH=main,SCHEMAS_DIR=schemas,GIT_TOKEN=ghp_YOUR_GITHUB_PAT,ACCESS_KEY=YOUR_CONFLUENCE_SECRET_KEY"
-```
-
-#### Option B: Connect to a GitLab Repository
-```bash
-gcloud run deploy erd-liam \
-  --image gcr.io/YOUR_GCP_PROJECT_ID/erd-liam:latest \
-  --region europe-west1 \
-  --platform managed \
-  --allow-unauthenticated \
-  --memory 512Mi \
-  --set-env-vars="GITLAB_PROJECT_ID=YOUR_PROJECT_ID,GIT_BRANCH=main,SCHEMAS_DIR=schemas,GIT_TOKEN=glpat_YOUR_GITLAB_PAT,ACCESS_KEY=YOUR_CONFLUENCE_SECRET_KEY"
 ```
 
 ---
