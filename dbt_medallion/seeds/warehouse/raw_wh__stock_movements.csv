@@ -1,0 +1,21 @@
+id,item_id,lot_id,from_location_id,to_location_id,type,quantity,reference_doc,performed_by,created_at
+1,1,1,,1,inbound_receipt,30.000,ASN-2026-0001,RF-SCAN-07,2026-09-01 11:00:00
+2,1,1,1,2,putaway,30.000,ASN-2026-0001,j.koval,2026-09-01 13:00:00
+3,2,2,,1,inbound_receipt,40.000,ASN-2026-0001,RF-SCAN-07,2026-09-01 11:05:00
+4,2,2,1,3,putaway,40.000,ASN-2026-0001,j.koval,2026-09-01 13:20:00
+5,3,3,,1,inbound_receipt,11.000,ASN-2026-0001,RF-SCAN-07,2026-09-01 11:10:00
+6,3,3,1,2,putaway,11.000,ASN-2026-0001,j.koval,2026-09-01 13:40:00
+7,5,,,1,inbound_receipt,10.000,ASN-2026-0002,RF-SCAN-03,2026-09-05 14:00:00
+8,5,,1,5,putaway,10.000,ASN-2026-0002,m.tkachuk,2026-09-05 15:30:00
+9,1,1,2,5,replenishment,8.000,REPL-2026-0042,m.tkachuk,2026-09-09 07:30:00
+10,1,1,5,9,outbound_pick,1.000,OUT-2026-0001,RF-SCAN-11,2026-09-10 16:00:00
+11,6,,6,9,outbound_pick,2.000,OUT-2026-0001,RF-SCAN-11,2026-09-10 16:05:00
+12,3,3,2,7,replenishment,4.000,REPL-2026-0047,m.tkachuk,2026-09-12 19:00:00
+13,3,3,7,9,outbound_pick,1.000,OUT-2026-0002,RF-SCAN-11,2026-09-12 20:00:00
+14,5,,5,8,internal_transfer,1.000,QC-2026-0012,o.savchuk,2026-10-18 11:00:00
+15,6,,,6,adjustment_plus,5.000,STK-2026-10,o.savchuk,2026-10-15 10:00:00
+16,7,,7,,adjustment_minus,2.000,STK-2026-10,o.savchuk,2026-10-15 10:10:00
+17,9,5,,10,inbound_receipt,60.000,ASN-2026-0005,RF-SCAN-21,2026-10-10 11:30:00
+18,9,5,10,12,putaway,60.000,ASN-2026-0005,k.moroz,2026-10-10 12:00:00
+19,1,1,,10,inbound_receipt,4.000,ASN-2026-0003,RF-SCAN-21,2026-10-21 13:00:00
+20,1,1,10,11,putaway,4.000,ASN-2026-0003,k.moroz,2026-10-21 14:00:00

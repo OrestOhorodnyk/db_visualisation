@@ -1,0 +1,7 @@
+id,parent_id,name,slug,description
+1,,Electronics,electronics,"Phones, laptops and gadgets"
+2,1,Smartphones,smartphones,Android and iOS smartphones
+3,1,Laptops,laptops,Ultrabooks and professional laptops
+4,,Home & Kitchen,home-kitchen,Appliances for home and kitchen
+5,4,Coffee Machines,coffee-machines,Espresso machines and grinders
+6,2,Phone Accessories,phone-accessories,"Cases, chargers and cables"

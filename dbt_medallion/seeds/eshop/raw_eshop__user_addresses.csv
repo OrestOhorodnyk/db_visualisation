@@ -1,0 +1,9 @@
+id,user_id,country,city,street_address,postal_code,is_default
+1,3,Ukraine,Lviv,"vul. Shevchenka 12, apt. 4",79005,true
+2,3,Ukraine,Kyiv,"vul. Khreshchatyk 22, office 310",01001,false
+3,4,Ukraine,Kyiv,"prosp. Peremohy 45, apt. 87",03057,true
+4,5,Ukraine,Odesa,Nova Poshta branch No. 14,65000,true
+5,6,Ukraine,Kharkiv,"vul. Sumska 101, apt. 12",61002,true
+6,7,Ukraine,Dnipro,"prosp. Yavornytskoho 50, apt. 3",49000,true
+7,8,Poland,Warsaw,"ul. Marszalkowska 84/92 m. 15",00-514,true
+8,8,Ukraine,Lviv,"vul. Horodotska 170",,false

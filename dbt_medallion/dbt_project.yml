@@ -1,0 +1,38 @@
+name: dbt_medallion
+version: "1.0.0"
+config-version: 2
+
+profile: dbt_medallion
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages", "logs"]
+
+seeds:
+  dbt_medallion:
+    +schema: raw
+    +quote_columns: false
+
+models:
+  dbt_medallion:
+    bronze:
+      +schema: bronze
+      +materialized: view
+      +tags: ["bronze"]
+    silver:
+      +schema: silver
+      +materialized: table
+      +tags: ["silver"]
+    gold:
+      +schema: gold
+      +materialized: table
+      +tags: ["gold"]
+      eshop:
+        +tags: ["eshop"]
+      warehouse:
+        +tags: ["warehouse"]
+      cross_domain:
+        +tags: ["cross_domain"]

@@ -1,0 +1,9 @@
+id,email,password_hash,first_name,last_name,phone,role,created_at,updated_at
+1,admin@eshop.ua,$argon2id$v=19$m=65536$dummyhash0001,Olena,Hrytsenko,+380501112233,admin,2025-01-10 09:00:00,2025-01-10 09:00:00
+2,manager@eshop.ua,$argon2id$v=19$m=65536$dummyhash0002,Taras,Petrenko,+380502223344,manager,2025-02-01 10:30:00,2026-03-15 08:12:00
+3,  Iryna.Bondar@Gmail.com ,$argon2id$v=19$m=65536$dummyhash0003,Iryna,Bondar,+380671234567,customer,2025-06-14 18:22:00,2026-09-10 10:00:00
+4,andriy.shevchenko@ukr.net,$argon2id$v=19$m=65536$dummyhash0004,Andriy,Shevchenko,+380632345678,customer,2025-08-03 12:05:00,2025-08-03 12:05:00
+5,maria.kovalenko@gmail.com,$argon2id$v=19$m=65536$dummyhash0005,Maria,Kovalenko,,customer,2025-11-20 21:40:00,2026-10-20 09:30:00
+6,dmytro.melnyk@outlook.com,$argon2id$v=19$m=65536$dummyhash0006,Dmytro,Melnyk,+380953456789,customer,2026-01-07 07:55:00,2026-01-07 07:55:00
+7,oksana.lysenko@gmail.com,$argon2id$v=19$m=65536$dummyhash0007,Oksana,Lysenko,+380974567890,customer,2026-04-18 15:10:00,2026-04-18 15:10:00
+8,PIOTR.NOWAK@WP.PL,$argon2id$v=19$m=65536$dummyhash0008,Piotr,Nowak,+48501234567,customer,2026-07-22 11:45:00,2026-07-22 11:45:00

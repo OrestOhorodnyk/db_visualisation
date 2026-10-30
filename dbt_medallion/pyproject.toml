@@ -1,0 +1,12 @@
+[project]
+name = "dbt-medallion"
+version = "0.1.0"
+description = "Dummy dbt medallion (bronze/silver/gold) project for the e-shop and warehouse source systems"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "dbt-core>=1.10,<2.0",
+    "dbt-duckdb>=1.9,<2.0",
+]
+
+[tool.uv]
+package = false

@@ -1,20 +1,21 @@
 # DB Visualization — Docs-as-Code ERD for Confluence
 
-An automated **Docs-as-Code** workflow for designing, versioning, and visualizing multiple database schemas using **DBML**, **Liam ERD**, **Docker**, and **GCP Cloud Run**, designed to be embedded into **Confluence `<iframe>`** pages.
+An automated **Docs-as-Code** workflow that models data in **dbt**, exports the models as **tbls JSON** schemas, and visualizes them as interactive **Liam ERD** diagrams. The diagrams are served by **Docker** / **GCP Cloud Run** and designed to be embedded into **Confluence `<iframe>`** pages.
 
 ```mermaid
 sequenceDiagram
-    participant Dev as VS Code
-    participant Git as GitHub / GitLab (stores .dbml only)
-    participant GCR as GCP Cloud Run (server.py + dbml_to_tbls.js + Liam CLI)
-    participant Conf as Confluence <iframe>
+    participant Dev as dbt project (VS Code)
+    participant Git as GitHub / GitLab (stores schemas/*.tbls.json)
+    participant GCR as GCP Cloud Run (server.py + Liam CLI)
+    participant Conf as Confluence iframe
 
-    Dev->>Git: 1. Edit schemas/warehouse.dbml & git push
-    Conf->>GCR: 2. GET /?schema=warehouse&showMode=ALL_FIELDS
-    GCR->>Git: 3. Fetch raw schemas/warehouse.dbml via Git API (if GITHUB_REPO is set)
-    Git-->>GCR: Return raw .dbml text
-    Note over GCR: 4. Compare SHA-256 hash of .dbml<br/>If changed: convert .dbml -> tbls JSON + liam erd build<br/>inside Cloud Run to generate schema.json
-    GCR-->>Conf: 5. Serve interactive Liam ERD SPA + schema.json
+    Dev->>Dev: 1. dbt build + dbt docs generate + scripts/export_tbls.py
+    Dev->>Git: 2. git push schemas/gold_marts.tbls.json
+    Conf->>GCR: 3. GET /?schema=gold_marts&showMode=ALL_FIELDS
+    GCR->>Git: 4. Fetch raw schemas/gold_marts.tbls.json via Git API (if GITHUB_REPO is set)
+    Git-->>GCR: Return tbls JSON
+    Note over GCR: 5. Compare SHA-256 hash of the schema<br/>If changed: liam erd build --format tbls<br/>inside Cloud Run to generate schema.json
+    GCR-->>Conf: 6. Serve interactive Liam ERD SPA + schema.json
 ```
 
 ---
@@ -23,19 +24,18 @@ sequenceDiagram
 
 | Tool | License | Commercial Use | Role in Project |
 | :--- | :--- | :--- | :--- |
-| **[DBML Specification](https://dbml.dbdiagram.io/)** | **Apache-2.0** | ✅ Free | Database-agnostic DSL for defining tables, columns, enums, relationships, indexes, and documentation notes (`schemas/*.dbml`) across **Snowflake**, PostgreSQL, BigQuery, etc. |
-| **[`@dbml/core` + `dbml_to_tbls.js`](https://github.com/holistics/dbml)** | **Apache-2.0** | ✅ Free | Parses `.dbml` files directly into `tbls` JSON format (`--format tbls`), preserving 100% of **Snowflake** (`VARIANT`, `OBJECT`, `ARRAY`, `NUMBER(38,0)`, `TIMESTAMP_NTZ`) and SQL data types verbatim. |
-| **[Liam ERD (`@liam-hq/cli`)](https://github.com/liam-hq/liam)** | **Apache-2.0** | ✅ Free | Open-source generator that builds an interactive web-based Entity-Relationship Diagram (SPA) from the generated `tbls` JSON schema. |
-| **[Python 3](https://www.python.org/) + [FastAPI](https://fastapi.tiangolo.com/)** | **PSF / MIT** | ✅ Free | Asynchronous Python web framework (`cloud_function/server.py`) powered by **Uvicorn** (BSD-3-Clause) and **HTTPX** (BSD-3-Clause) that dynamically fetches `.dbml` files from Git, caches builds by SHA-256 hash, isolates multiple schemas across Confluence `<iframe>` embeds, and injects hover tooltips. |
-| **[`uv` (`ghcr.io/astral-sh/uv:python3.12-alpine`)](https://docs.astral.sh/uv/)** | **Apache-2.0 / MIT** | ✅ Free | Base container image providing pinned Python 3.12 and high-performance `uv` dependency management (`pyproject.toml` & `uv.lock`). |
-| **[Node.js (`nodejs` / `npm` on Alpine)](https://nodejs.org/)** | **MIT** | ✅ Free | Runtime inside the container used to execute the `@dbml/cli` and `@liam-hq/cli` CLI tools. |
-| **VS Code Extensions** (`bocovo.dbml-erd-visualizer`, `matt-meyers.vscode-dbml`) | **MIT** | ✅ Free | Local IDE syntax highlighting and live DBML diagram preview during schema authoring. |
+| **[dbt Core](https://github.com/dbt-labs/dbt-core) + [dbt-duckdb](https://github.com/duckdb/dbt-duckdb)** | **Apache-2.0 / MIT** | ✅ Free | Source of truth for the data models (`dbt_medallion/`): SQL models, YAML docs and tests. `dbt docs generate` produces the `manifest.json` / `catalog.json` that the exporter reads. |
+| **[tbls JSON format](https://github.com/k1LoW/tbls)** | **MIT** | ✅ Free | Schema interchange format (`schemas/*.tbls.json`) holding tables, typed columns, comments, constraints and relations. Written by `dbt_medallion/scripts/export_tbls.py`. |
+| **[Liam ERD (`@liam-hq/cli`)](https://github.com/liam-hq/liam)** | **Apache-2.0** | ✅ Free | Open-source generator that builds an interactive web-based Entity-Relationship Diagram (SPA) from the tbls JSON schema. |
+| **[Python 3](https://www.python.org/) + [FastAPI](https://fastapi.tiangolo.com/)** | **PSF / MIT** | ✅ Free | Asynchronous Python web framework (`cloud_function/server.py`) powered by **Uvicorn** (BSD-3-Clause) and **HTTPX** (BSD-3-Clause) that dynamically fetches `.tbls.json` files from Git, caches builds by SHA-256 hash, isolates multiple schemas across Confluence `<iframe>` embeds, and injects hover tooltips. |
+| **[`uv` (`ghcr.io/astral-sh/uv:python3.12-alpine`)](https://docs.astral.sh/uv/)** | **Apache-2.0 / MIT** | ✅ Free | Base container image providing pinned Python 3.12 and high-performance `uv` dependency management (`pyproject.toml` & `uv.lock`) for both the server and the dbt project. |
+| **[Node.js (`nodejs` / `npm` on Alpine)](https://nodejs.org/)** | **MIT** | ✅ Free | Runtime inside the container used to execute the `@liam-hq/cli` CLI tool. |
 | **Docker Engine / CLI & Buildx** | **Apache-2.0** | ✅ Free* | Container build and runtime tools (*see note below on Docker Desktop vs. open-source runtimes*). |
 | **GCP Cloud Run & Cloud Build** | **Cloud Service (Pay-as-you-go)** | ✅ Free Tier / Paid | Serverless container runtime providing an HTTPS endpoint (`https://*.a.run.app`) that scales to zero when idle. |
 
 ### Licensing & Commercial Compliance Notes
 
-* **No Paid SaaS Subscriptions Required for Diagramming:** Unlike hosted `dbdiagram.io` or `dbdocs.io` (which require paid per-user subscriptions for private schemas, table groups, or password protection), both **`@dbml/cli`** and **`@liam-hq/cli`** are licensed under the permissive **Apache-2.0 License**. They can be freely used, modified, and self-hosted inside commercial/enterprise environments without licensing fees.
+* **No Paid SaaS Subscriptions Required for Diagramming:** Unlike hosted `dbdiagram.io` or `dbdocs.io` (which require paid per-user subscriptions for private schemas or password protection), **dbt Core** and **`@liam-hq/cli`** are licensed under the permissive **Apache-2.0 License**. They can be freely used, modified, and self-hosted inside commercial/enterprise environments without licensing fees.
 * **Docker Licensing Note:**
   * **Docker Engine, Docker CLI, and Buildx** are open-source under **Apache-2.0** and completely free for any company size when used on Linux, in CI/CD, or on macOS via open-source runtimes like **Colima** or **Rancher Desktop**.
   * **Docker Desktop** (the GUI application) requires a paid subscription for organizations with more than 250 employees or more than \$10M in annual revenue.
@@ -49,35 +49,142 @@ sequenceDiagram
 
 ```text
 db_visualisation/
-├── schemas/
-│   ├── e_shop_schema.dbml       # E-Commerce database schema
-│   └── warehouse.dbml           # Warehouse Management System (WMS) schema
+├── schemas/                         # Generated by dbt_medallion/scripts/export_tbls.py, do not edit by hand
+│   ├── gold_marts.tbls.json         # Gold dims, facts and cross-domain marts
+│   ├── silver_eshop.tbls.json       # Silver e-shop entities
+│   └── silver_warehouse.tbls.json   # Silver warehouse (WMS) entities
 ├── cloud_function/
 │   ├── docker/
-│   │   └── Dockerfile           # Production & local Docker image definition
-│   ├── dbml_to_tbls.js          # Direct DBML -> tbls JSON converter (Snowflake/SQL type-preserving)
-│   ├── pyproject.toml           # Python project metadata & dependencies (managed by uv)
-│   ├── uv.lock                  # Reproducible dependency lockfile
-│   └── server.py                # Async multi-schema FastAPI server
+│   │   └── Dockerfile               # Production & local Docker image definition
+│   ├── pyproject.toml               # Python project metadata & dependencies (managed by uv)
+│   ├── uv.lock                      # Reproducible dependency lockfile
+│   └── server.py                    # Async multi-schema FastAPI server
+├── dbt_medallion/                   # dbt + DuckDB medallion project (source of truth for the ERDs)
+│   ├── seeds/                       # Dummy raw data (one CSV per source table)
+│   ├── scripts/export_tbls.py       # dbt manifest + catalog -> schemas/*.tbls.json
+│   └── models/{bronze,silver,gold}/
 ├── .dockerignore
 └── README.md
 ```
 
 ---
 
-## Local Usage (VS Code + Docker)
+## dbt Medallion Project (`dbt_medallion/`)
 
-### 1. Recommended VS Code Extensions
-For syntax highlighting and side-by-side preview while editing `.dbml` files in VS Code:
-* **DBML Entity-Relationship Diagrams visualizer** (`bocovo.dbml-erd-visualizer`)
-* **vscode-dbml** (`matt-meyers.vscode-dbml`)
+A self-contained dummy **dbt + DuckDB** project that models an e-shop and a warehouse (WMS) system in the medallion (bronze / silver / gold) style. It ships with consistent seed data, so it runs end to end locally without any external database.
 
-### 2. Build the Docker Image
+```bash
+cd dbt_medallion
+uv sync
+uv run dbt build --profiles-dir .   # seeds + models + tests into medallion.duckdb
+```
+
+| Layer | Schema | Materialization | Contents |
+| :--- | :--- | :--- | :--- |
+| Raw | `raw` | seed | One CSV per source table (`raw_eshop__*`, `raw_wh__*`), typed in `seeds/_seeds.yml` |
+| Bronze | `bronze` | view | 1:1 copies of raw tables plus `_loaded_at` / `_source_table`; column descriptions, PK tests |
+| Silver | `silver` | table | Renamed, trimmed, normalized entities; enums as `accepted_values` tests, FKs as `relationships` tests |
+| Gold | `gold` | table | `eshop/`, `warehouse/` dims and facts, plus `cross_domain/` marts |
+
+The cross-domain gold models join the two systems on their shared keys:
+* `fct_order_fulfillment`: e-shop `orders.order_number` = warehouse `outbound_orders.external_order_ref`. It shows both statuses side by side, lead times, and status inconsistencies.
+* `mart_product_stock_reconciliation`: e-shop `products.sku` = warehouse `items.sku`. It compares storefront stock with the warehouse's sellable quantity.
+
+Use `uv run dbt docs generate --profiles-dir . && uv run dbt docs serve --profiles-dir .` to browse the lineage graph.
+
+### Exporting ERDs (dbt -> tbls JSON)
+
+`scripts/export_tbls.py` reads dbt's `target/manifest.json` and `target/catalog.json` and writes one `schemas/<name>.tbls.json` per diagram:
+
+| Schema | Models |
+| :--- | :--- |
+| `gold_marts` | `models/gold/**` (dims, facts, cross-domain marts) |
+| `silver_eshop` | `models/silver/eshop/**` |
+| `silver_warehouse` | `models/silver/warehouse/**` |
+
+```bash
+cd dbt_medallion
+uv run dbt build --profiles-dir .
+uv run dbt docs generate --profiles-dir .      # writes target/manifest.json + target/catalog.json
+uv run python scripts/export_tbls.py           # writes all three ../schemas/*.tbls.json
+uv run python scripts/export_tbls.py --layer bronze --folder eshop   # one-off: schemas/bronze_eshop.tbls.json
+```
+
+* Column types come from `catalog.json`, and descriptions come from the model YAML docs. Descriptions show as hover tooltips and in the details panel.
+* A column with both `unique` and `not_null` tests becomes the table's `PRIMARY KEY`. Other `unique` tests become `UNIQUE` constraints, and `not_null` tests mark the column as not nullable.
+* Every `relationships` test between two exported models becomes a `FOREIGN KEY` and a relation line, so declare a test for each key you want drawn.
+* Relationship type follows the tests on the foreign-key column:
+
+  | Tests on the FK column | Drawn as | tbls `cardinality` / `parent_cardinality` |
+  | :--- | :--- | :--- |
+  | `relationships` | one-to-many | `zero_or_more` / `zero_or_one` |
+  | `relationships` + `not_null` | one-to-many | `zero_or_more` / `exactly_one` |
+  | `relationships` + `unique` (or the column is the PK) | one-to-one | `zero_or_one` / `zero_or_one` (`exactly_one` if also `not_null`) |
+
+  Many-to-many is modelled as a bridge table with two one-to-many links (e.g. `fct_order_items`). Liam draws optional and mandatory parents the same way; the difference is only stored in the tbls file.
+
+Commit the regenerated `schemas/*.tbls.json` files so the Cloud Run service can fetch them from Git.
+
+### Updating the Diagrams After dbt Model Changes
+
+The diagrams are drawn from the generated `schemas/*.tbls.json` files, not from dbt directly. After changing models, regenerate the files and commit them:
+
+```bash
+cd dbt_medallion
+uv run dbt build --profiles-dir .           # build the changed models (and run their tests)
+uv run dbt docs generate --profiles-dir .   # refresh target/manifest.json + target/catalog.json
+uv run python scripts/export_tbls.py        # rewrite ../schemas/*.tbls.json
+git add ../schemas && git commit -m "Update ERDs"
+git push
+```
+
+Every kind of model change needs this re-export:
+
+| You changed | Shows up on the diagram as |
+| :--- | :--- |
+| Columns in the SQL (added, removed, renamed, different type) | Columns and types, read from the database through `catalog.json` |
+| YAML `description` | Hover tooltips and the details panel |
+| `unique` / `not_null` / `relationships` tests | Primary keys, unique constraints, relation lines, one-to-one vs one-to-many |
+| A new model in `models/gold/**` or `models/silver/{eshop,warehouse}/**` | A new table in that diagram, picked up automatically |
+| A new layer or folder you want as its own diagram | Add an entry to `DEFAULT_EXPORTS` in `scripts/export_tbls.py` |
+
+How the change reaches the viewer:
+* **Local container:** started with the `-v` mounts from [Run Locally](#2-run-locally-with-live-reload-on-refresh), it reads `schemas/` straight from disk. Refresh the browser.
+* **Cloud Run:** no redeploy is needed. On each request the server fetches the file from Git, compares its SHA-256 hash, and rebuilds the diagram when it has changed. The change can take up to `CACHE_TTL_SECONDS` (15 by default) to appear. Add `&refresh=1` to the URL to force it.
+* **Feature branches:** `?branch=feat/my-change` renders the version on that branch, so a model change can be reviewed in Confluence before merging.
+
+#### Do I need to rebuild the Docker image?
+
+Not for model or diagram changes. Rebuild only when the server itself changes:
+
+| What changed | Local container (run with `-v` mounts) | Cloud Run (with `GITHUB_REPO` / `GITLAB_PROJECT_ID` set) |
+| :--- | :--- | :--- |
+| dbt models, so `schemas/*.tbls.json` is regenerated | Nothing to do: refresh the browser | Nothing to do: commit and push |
+| `cloud_function/server.py` | Restart the container (no auto-reload); no rebuild needed | Rebuild the image and redeploy |
+| `Dockerfile`, `pyproject.toml` / `uv.lock`, Liam CLI version | Rebuild the image and re-run it | Rebuild the image and redeploy |
+
+You do need a rebuild after model changes in two cases:
+* **Local container without the `-v` mounts:** it only has the schemas copied into the image at build time.
+* **Cloud Run without Git configured:** with no `GITHUB_REPO`, `GITLAB_PROJECT_ID` or `GIT_RAW_URL` set, the server falls back to those baked-in schemas.
+
+The diagrams built during `docker build` are only a cache. When the file in Git differs from the one baked in, the server builds a fresh diagram the first time someone opens it. That first load takes a few seconds, and later loads are instant until the next change.
+
+#### Keeping diagrams in sync
+
+The diagram goes stale if a model changes and nobody re-exports. To catch this, add a CI step that runs the commands above and fails when `git diff --exit-code -- schemas/` reports changes. With the DuckDB dummy data, this needs no credentials. On a real warehouse (e.g. Snowflake), `dbt docs generate` has to connect to read column types, so the CI job needs database credentials.
+
+---
+
+## Local Usage (Docker)
+
+### 1. Build the Docker Image
 From the project root directory:
 
 ```bash
 docker build -f cloud_function/docker/Dockerfile -t erd-liam .
 ```
+
+The build pre-renders every `schemas/*.tbls.json`, so the first page load is instant.
 
 > **Note for macOS (Homebrew Docker CLI):** If you see `DEPRECATED: The legacy builder is deprecated`, enable Docker Buildx:
 > ```bash
@@ -86,8 +193,8 @@ docker build -f cloud_function/docker/Dockerfile -t erd-liam .
 > ln -sfn "$(brew --prefix)/opt/docker-buildx/bin/docker-buildx" ~/.docker/cli-plugins/docker-buildx
 > ```
 
-### 3. Run Locally with Live Reload on Refresh
-Mount the local `schemas/` folder and `server.py` into the container so any edits saved in VS Code (`Cmd + S`) take effect immediately when you refresh the browser (no container restart needed):
+### 2. Run Locally with Live Reload on Refresh
+Mount the local `schemas/` folder and `server.py` into the container. Re-running the exporter then takes effect when you refresh the browser, with no container restart needed:
 
 ```bash
 docker run --rm -p 3002:8080 \
@@ -96,46 +203,32 @@ docker run --rm -p 3002:8080 \
   erd-liam
 ```
 
-### 4. Open in Browser
-* **Schema Directory (lists all `.dbml` files with copyable Confluence URLs):**
+> **Colima note:** Colima only shares your home directory with Docker by default, so mount folders from inside your home directory (not `/tmp`).
+
+### 3. Open in Browser
+* **Schema Directory (lists all `.tbls.json` files with copyable Confluence URLs):**
   [http://localhost:3002/](http://localhost:3002/)
-* **E-Shop Schema:**
-  [http://localhost:3002/?schema=e_shop_schema&showMode=ALL_FIELDS](http://localhost:3002/?schema=e_shop_schema&showMode=ALL_FIELDS)
-* **Warehouse Schema:**
-  [http://localhost:3002/?schema=warehouse&showMode=ALL_FIELDS](http://localhost:3002/?schema=warehouse&showMode=ALL_FIELDS)
+* **Gold Marts:**
+  [http://localhost:3002/?schema=gold_marts&showMode=ALL_FIELDS](http://localhost:3002/?schema=gold_marts&showMode=ALL_FIELDS)
+* **Silver E-Shop:**
+  [http://localhost:3002/?schema=silver_eshop&showMode=ALL_FIELDS](http://localhost:3002/?schema=silver_eshop&showMode=ALL_FIELDS)
+* **Silver Warehouse:**
+  [http://localhost:3002/?schema=silver_warehouse&showMode=ALL_FIELDS](http://localhost:3002/?schema=silver_warehouse&showMode=ALL_FIELDS)
 * **Build Status & Diagnostics API:**
   [http://localhost:3002/api/status](http://localhost:3002/api/status)
 
 ---
 
-## Writing Schemas & Documentation Notes
-
-1. **Adding a New Schema:**
-   Create a new `<name>.dbml` file inside the `schemas/` folder (e.g., `schemas/crm.dbml`). It will automatically appear on the root directory page (`/`) and be accessible at `/?schema=crm&showMode=ALL_FIELDS`.
-2. **Adding Table & Field Descriptions:**
-   Use `note: '...'` on columns and `Note: '...'` inside tables:
-   ```dbml
-   Table warehouses {
-     id integer [pk, increment, note: 'Primary warehouse identifier']
-     code varchar(20) [unique, not null, note: 'Short facility code, e.g., WH-LWO-01']
-
-     Note: 'Physical warehouse facilities and distribution centers'
-   }
-   ```
-   Descriptions are visible both **on mouse hover (tooltip)** directly on the diagram canvas and **in the right-hand details panel** when clicking a table.
-
----
-
 ## Deploying to GCP Cloud Run (GitHub & GitLab Integration)
 
-Because [`server.py`](file:///Users/orestohorodnyk/Documents/work_files/db_visualisation/cloud_function/server.py) dynamically fetches `.dbml` files from your Git repository on the fly, **you only need to deploy the service to GCP Cloud Run once**. Subsequent changes pushed to `schemas/*.dbml` in Git will automatically render in Confluence without redeploying the container.
+Because [`server.py`](cloud_function/server.py) dynamically fetches `.tbls.json` files from your Git repository on the fly, **you only need to deploy the service to GCP Cloud Run once**. Subsequent changes pushed to `schemas/*.tbls.json` in Git will automatically render in Confluence without redeploying the container.
 
 ### Supported Git Providers
 
 1. **GitLab (GitLab.com & Self-Hosted GitLab Instances):**
    * Uses the official **GitLab REST API v4**:
      * Lists available schemas via `GET {GITLAB_URL}/api/v4/projects/{GITLAB_PROJECT_ID}/repository/tree?path=schemas&ref={branch}`
-     * Fetches raw `.dbml` files via `GET {GITLAB_URL}/api/v4/projects/{GITLAB_PROJECT_ID}/repository/files/{file}/raw?ref={branch}`
+     * Fetches raw `.tbls.json` files via `GET {GITLAB_URL}/api/v4/projects/{GITLAB_PROJECT_ID}/repository/files/{file}/raw?ref={branch}`
    * **Token Setup:** In GitLab, navigate to **Settings → Access Tokens** (Project Access Token) or **User Settings → Personal Access Tokens** and create a token with the **`read_api`** (or `read_repository`) scope and **Reporter / Viewer** role.
    * **Project Identifier (`GITLAB_PROJECT_ID`):** Supports either the numeric Project ID (e.g., `5829104`) or the namespace/project path (e.g., `my-group/db-visualisation`).
    * **Self-Hosted GitLab (`GITLAB_URL`):** Defaults to `https://gitlab.com`. Set `GITLAB_URL=https://gitlab.your-company.com` for internal/self-managed GitLab servers.
@@ -200,7 +293,7 @@ gcloud run deploy erd-liam \
 | Variable | Default | Description |
 | :--- | :--- | :--- |
 | `PORT` | `8080` | HTTP port listened on by `server.py`. |
-| `SCHEMAS_DIR` | `schemas` | Folder path in the repository containing `.dbml` files. |
+| `SCHEMAS_DIR` | `schemas` | Folder path in the repository containing `.tbls.json` files. |
 | `GITHUB_REPO` | `""` | GitHub repository in `owner/repo` format for dynamic fetching. |
 | `GITLAB_PROJECT_ID` | `""` | GitLab project ID or URL-encoded path (`group/project`). |
 | `GITLAB_URL` | `https://gitlab.com` | Base URL for self-hosted or cloud GitLab instances. |
@@ -218,17 +311,16 @@ gcloud run deploy erd-liam \
 
 1. Open your target Confluence page and insert the **Iframe** macro.
 2. Configure the macro URL for the specific schema you want to display on that page:
-   * **E-Shop Page:**
+   * **Gold Marts Page:**
      ```text
-     https://erd-liam-xxxxx-ew.a.run.app/?schema=e_shop_schema&showMode=ALL_FIELDS&key=YOUR_CONFLUENCE_SECRET_KEY
+     https://erd-liam-xxxxx-ew.a.run.app/?schema=gold_marts&showMode=ALL_FIELDS&key=YOUR_CONFLUENCE_SECRET_KEY
      ```
    * **Warehouse Page:**
      ```text
-     https://erd-liam-xxxxx-ew.a.run.app/?schema=warehouse&showMode=ALL_FIELDS&key=YOUR_CONFLUENCE_SECRET_KEY
+     https://erd-liam-xxxxx-ew.a.run.app/?schema=silver_warehouse&showMode=ALL_FIELDS&key=YOUR_CONFLUENCE_SECRET_KEY
      ```
    * **Specific Feature Branch (e.g., for RFC / Architecture Review pages):**
      ```text
-     https://erd-liam-xxxxx-ew.a.run.app/?schema=warehouse&branch=feat/new-lots&showMode=ALL_FIELDS&key=YOUR_CONFLUENCE_SECRET_KEY
+     https://erd-liam-xxxxx-ew.a.run.app/?schema=gold_marts&branch=feat/new-marts&showMode=ALL_FIELDS&key=YOUR_CONFLUENCE_SECRET_KEY
      ```
 3. Set **Width** to `100%` and **Height** to `800px`.
-

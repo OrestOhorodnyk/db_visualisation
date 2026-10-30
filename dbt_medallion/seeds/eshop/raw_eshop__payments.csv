@@ -1,0 +1,12 @@
+id,order_id,transaction_id,provider,method,status,amount,currency,paid_at,created_at
+1,1,pi_3Q0001StripeA,Stripe,card,completed,16797.00,UAH,2026-09-10 10:16:12,2026-09-10 10:15:30
+2,2,lp_2026_000002,LiqPay,card,failed,45999.00,UAH,,2026-09-12 18:00:05
+3,2,lp_2026_000003,LiqPay,card,completed,45999.00,UAH,2026-09-12 18:05:41,2026-09-12 18:04:50
+4,3,mono_7f3a0004,MonoPay,card,completed,13368.00,uah,2026-10-20 09:26:02,2026-10-20 09:25:40
+5,4,BT-2026-0004,PrivatBank,bank_transfer,completed,18796.00,UAH,2026-10-26 14:55:00,2026-10-26 13:41:00
+6,5,pi_3Q0006StripeB,Stripe,card,completed,2327.00,UAH,2026-10-27 20:11:03,2026-10-27 20:10:30
+7,6,pi_3Q0007StripeC,Stripe,card,pending,32999.00,UAH,,2026-10-28 08:45:20
+8,7,pi_3Q0008StripeD,Stripe,card,refunded,2979.00,UAH,2026-10-01 19:31:00,2026-10-01 19:30:20
+9,8,mono_7f3a0009,MonoPay,card,completed,15748.00,UAH,2026-10-05 08:51:10,2026-10-05 08:50:40
+10,9,,,cash_on_delivery,pending,1676.00,UAH,,2026-10-24 16:00:30
+11,10,,,cash_on_delivery,pending,12898.00,UAH,,2026-10-27 11:20:30

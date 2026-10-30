@@ -1,0 +1,157 @@
+version: 2
+
+models:
+  - name: slv_eshop__users
+    description: Cleaned platform accounts (customers, managers, admins). Password hashes are dropped at this layer.
+    columns:
+      - name: user_id
+        data_tests: [unique, not_null]
+      - name: email
+        description: Trimmed, lower-cased login email.
+        data_tests: [unique, not_null]
+      - name: full_name
+        description: First and last name concatenated.
+      - name: user_role
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["customer", "admin", "manager"]
+
+  - name: slv_eshop__user_addresses
+    description: Cleaned customer shipping and billing addresses.
+    columns:
+      - name: address_id
+        data_tests: [unique, not_null]
+      - name: user_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('slv_eshop__users')
+                field: user_id
+      - name: is_default
+        data_tests: [not_null]
+
+  - name: slv_eshop__categories
+    description: Category tree flattened with a recursive CTE into a full breadcrumb path and root category.
+    columns:
+      - name: category_id
+        data_tests: [unique, not_null]
+      - name: parent_category_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('slv_eshop__categories')
+                field: category_id
+      - name: category_slug
+        data_tests: [unique, not_null]
+      - name: category_depth
+        description: 0 for root categories, incremented per level.
+      - name: root_category_name
+        description: Name of the top-level ancestor category.
+      - name: category_path
+        description: "Breadcrumb from root to this category, e.g. 'Electronics > Smartphones'."
+
+  - name: slv_eshop__products
+    description: Cleaned storefront products with normalized (upper-cased, trimmed) SKU.
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: sku
+        description: Normalized SKU, the conformed key shared with the warehouse `items.sku`.
+        data_tests: [unique, not_null]
+      - name: category_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('slv_eshop__categories')
+                field: category_id
+      - name: list_price
+        description: Current retail unit price.
+        data_tests: [not_null]
+
+  - name: slv_eshop__orders
+    description: Cleaned order headers.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: order_number
+        description: Customer-facing order code; matches warehouse `outbound_orders.external_order_ref`.
+        data_tests: [unique, not_null]
+      - name: user_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('slv_eshop__users')
+                field: user_id
+      - name: shipping_address_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('slv_eshop__user_addresses')
+                field: address_id
+      - name: order_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["pending", "paid", "processing", "shipped", "delivered", "cancelled"]
+      - name: items_amount_declared
+        description: total_amount minus shipping_cost, as declared on the order header.
+      - name: ordered_at
+        description: Order placement timestamp.
+
+  - name: slv_eshop__order_items
+    description: Cleaned order lines with computed line amount.
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('slv_eshop__orders')
+                field: order_id
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('slv_eshop__products')
+                field: product_id
+      - name: line_amount
+        description: quantity * unit_price.
+
+  - name: slv_eshop__payments
+    description: Cleaned payment transactions.
+    columns:
+      - name: payment_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('slv_eshop__orders')
+                field: order_id
+      - name: transaction_id
+        data_tests: [unique]
+      - name: payment_method
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["card", "bank_transfer", "cash_on_delivery"]
+      - name: payment_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["pending", "completed", "failed", "refunded"]
+      - name: currency
+        description: Upper-cased ISO 4217 code.
+        data_tests: [not_null]

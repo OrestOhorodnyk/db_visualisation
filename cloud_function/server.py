@@ -47,6 +47,9 @@ CACHE_TTL_SECONDS = float(os.environ.get("CACHE_TTL_SECONDS", "15"))
 FRAME_ANCESTORS = os.environ.get("FRAME_ANCESTORS", "'self' https://*.atlassian.net")
 ACCESS_KEY = os.environ.get("ACCESS_KEY", "")
 
+# Schemas are tbls JSON files (exported from dbt by dbt_medallion/scripts/export_tbls.py)
+TBLS_EXT = ".tbls.json"
+
 MIME_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "application/javascript; charset=utf-8",
@@ -63,7 +66,7 @@ MIME_TYPES = {
 
 app = FastAPI(
     title="Liam ERD Multi-Schema Server",
-    description="Dynamic DBML to Liam ERD server for GCP Cloud Run and Confluence iframes",
+    description="Dynamic tbls JSON to Liam ERD server for GCP Cloud Run and Confluence iframes",
     docs_url="/api/docs",
     redoc_url=None,
 )
@@ -87,10 +90,22 @@ def get_key_lock(cache_key: str) -> asyncio.Lock:
     return build_locks[cache_key]
 
 
+def schema_name_from_file(file_name: str) -> str:
+    return posixpath.basename(file_name).removesuffix(TBLS_EXT)
+
+
+def schema_entries(file_paths: list[str]) -> list[dict[str, str]]:
+    return [
+        {"name": schema_name_from_file(path), "file": path}
+        for path in sorted(file_paths)
+        if path.endswith(TBLS_EXT)
+    ]
+
+
 def normalize_schema_file(raw_input: str) -> str:
     """
-    Resolves a short schema name (e.g., 'warehouse' or 'e_shop_schema')
-    into a normalized relative repository path ('schemas/warehouse.dbml').
+    Resolves a short schema name (e.g., 'gold_marts' or 'silver_eshop')
+    into a normalized relative repository path ('schemas/gold_marts.tbls.json').
     """
     if not raw_input:
         return ""
@@ -98,10 +113,10 @@ def normalize_schema_file(raw_input: str) -> str:
     clean = posixpath.normpath(clean)
     while clean.startswith("../") or clean == "..":
         clean = clean[3:] if clean.startswith("../") else ""
-    if not clean:
+    if not clean or clean == ".":
         return ""
-    if not clean.endswith(".dbml"):
-        clean += ".dbml"
+    if not clean.endswith(TBLS_EXT):
+        clean += TBLS_EXT
     if "/" not in clean:
         clean = f"{SCHEMAS_DIR}/{clean}"
     return clean
@@ -109,7 +124,7 @@ def normalize_schema_file(raw_input: str) -> str:
 
 async def list_available_schemas(branch: str) -> list[dict[str, str]]:
     """
-    Returns a list of available .dbml schemas from GitHub, GitLab, or local schemas/ directory.
+    Returns a list of available .tbls.json schemas from GitHub, GitLab, or local schemas/ directory.
     """
     headers = {"User-Agent": "liam-erd-fastapi"}
 
@@ -125,11 +140,9 @@ async def list_available_schemas(branch: str) -> list[dict[str, str]]:
                 if resp.status_code == 200:
                     items = resp.json()
                     if isinstance(items, list):
-                        return [
-                            {"name": item["name"][:-5], "file": item["path"]}
-                            for item in items
-                            if item.get("type") == "file" and item.get("name", "").endswith(".dbml")
-                        ]
+                        return schema_entries(
+                            [item["path"] for item in items if item.get("type") == "file"]
+                        )
 
             if GITLAB_PROJECT_ID:
                 if GIT_TOKEN:
@@ -145,29 +158,26 @@ async def list_available_schemas(branch: str) -> list[dict[str, str]]:
                 if resp.status_code == 200:
                     items = resp.json()
                     if isinstance(items, list):
-                        return [
-                            {"name": item["name"][:-5], "file": item["path"]}
-                            for item in items
-                            if item.get("type") == "blob" and item.get("name", "").endswith(".dbml")
-                        ]
+                        return schema_entries(
+                            [item["path"] for item in items if item.get("type") == "blob"]
+                        )
     except Exception as exc:
         print(f"[Liam ERD] Warning listing remote schemas: {exc}", flush=True)
 
     # Fallback to local schemas/ directory
     local_dir = LOCAL_ROOT_DIR / SCHEMAS_DIR
     if local_dir.is_dir():
-        files = sorted(
-            f.name for f in local_dir.iterdir() if f.is_file() and f.name.endswith(".dbml")
+        return schema_entries(
+            [f"{SCHEMAS_DIR}/{f.name}" for f in local_dir.iterdir() if f.is_file()]
         )
-        return [{"name": fname[:-5], "file": f"{SCHEMAS_DIR}/{fname}"} for fname in files]
 
     return []
 
 
-async def fetch_schema_dbml(branch: str, file_path: str) -> tuple[str, str]:
+async def fetch_schema_file(branch: str, file_path: str) -> tuple[str, str]:
     """
-    Fetches the latest content of a specific .dbml file from Git or local directory.
-    Returns (content, source_description).
+    Fetches the latest content of a specific .tbls.json file from Git or local directory.
+    Raises FileNotFoundError when the file does not exist. Returns (content, source_description).
     """
     clean_file = normalize_schema_file(file_path)
     headers = {"User-Agent": "liam-erd-fastapi"}
@@ -181,6 +191,8 @@ async def fetch_schema_dbml(branch: str, file_path: str) -> tuple[str, str]:
             encoded_branch = urllib.parse.quote(branch, safe="")
             url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{clean_file}?ref={encoded_branch}"
             resp = await client.get(url, headers=headers)
+            if resp.status_code == 404:
+                raise FileNotFoundError(f"Schema file not found on GitHub: {clean_file}")
             if resp.status_code != 200:
                 raise RuntimeError(
                     f'GitHub API error ({resp.status_code}) for "{clean_file}": {resp.text}'
@@ -199,6 +211,8 @@ async def fetch_schema_dbml(branch: str, file_path: str) -> tuple[str, str]:
                 f"{encoded_file}/raw?ref={encoded_branch}"
             )
             resp = await client.get(url, headers=headers)
+            if resp.status_code == 404:
+                raise FileNotFoundError(f"Schema file not found on GitLab: {clean_file}")
             if resp.status_code != 200:
                 raise RuntimeError(
                     f'GitLab API error ({resp.status_code}) for "{clean_file}": {resp.text}'
@@ -213,6 +227,8 @@ async def fetch_schema_dbml(branch: str, file_path: str) -> tuple[str, str]:
                 "{branch}", urllib.parse.quote(branch, safe="")
             ).replace("{file}", clean_file)
             resp = await client.get(url, headers=headers)
+            if resp.status_code == 404:
+                raise FileNotFoundError(f"Schema file not found at raw URL: {url}")
             if resp.status_code != 200:
                 raise RuntimeError(
                     f'Raw URL fetch error ({resp.status_code}) for "{clean_file}": {resp.text}'
@@ -245,7 +261,7 @@ async def ensure_liam_build(
     branch: str, raw_file_path: str, force_refresh: bool = False
 ) -> dict:
     """
-    Checks whether the .dbml file has changed and rebuilds Liam ERD for the schema if needed.
+    Checks whether the .tbls.json file has changed and rebuilds Liam ERD for the schema if needed.
     """
     file_path = normalize_schema_file(raw_file_path)
     cache_key = f"{branch}:{file_path}"
@@ -275,14 +291,14 @@ async def ensure_liam_build(
         ):
             return cached
 
-        dbml_content, source = await fetch_schema_dbml(branch, file_path)
-        current_hash = sha256_hex(dbml_content)
+        schema_content, source = await fetch_schema_file(branch, file_path)
+        current_hash = sha256_hex(schema_content)
 
         if cached and cached["hash"] == current_hash and Path(cached["outputDir"]).is_dir():
             cached["lastCheckedAt"] = time.time()
             return cached
 
-        schema_base_name = Path(file_path).stem
+        schema_base_name = schema_name_from_file(file_path)
         prebuilt_dir = PREBUILT_ROOT / sanitize_key(schema_base_name)
         prebuilt_hash_file = prebuilt_dir / ".schema_hash"
         if prebuilt_hash_file.is_file():
@@ -305,21 +321,14 @@ async def ensure_liam_build(
         tmp_work_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            tmp_dbml_path = tmp_work_dir / "schema.dbml"
             tmp_tbls_path = tmp_work_dir / "schema.tbls.json"
             tmp_dist_dir = tmp_work_dir / "dist"
-            converter_script = Path(__file__).resolve().parent / "dbml_to_tbls.js"
 
-            tmp_dbml_path.write_text(dbml_content, encoding="utf-8")
-
-            rc, out, err = await run_cli_command(
-                ["node", str(converter_script), "schema.dbml", "schema.tbls.json"],
-                cwd=tmp_work_dir,
-            )
-            if rc != 0 or not tmp_tbls_path.is_file():
-                raise RuntimeError(
-                    f'DBML syntax error in "{file_path}":\n{out}\n{err}'.strip()
-                )
+            try:
+                json.loads(schema_content)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f'Invalid tbls JSON in "{file_path}": {exc}') from exc
+            tmp_tbls_path.write_text(schema_content, encoding="utf-8")
 
             rc, out, err = await run_cli_command(
                 [
@@ -508,7 +517,7 @@ def render_schema_directory_html(
     cards_section = (
         "\n".join(rows_html)
         if rows_html
-        else "<p>No .dbml files found in schemas/ directory.</p>"
+        else "<p>No .tbls.json files found in schemas/ directory.</p>"
     )
 
     return f"""<!DOCTYPE html>
@@ -668,7 +677,7 @@ async def serve_erd_or_asset(
         if not target_file:
             schemas = await list_available_schemas(branch)
             if not schemas:
-                raise FileNotFoundError("No .dbml schemas found in schemas/ directory")
+                raise FileNotFoundError("No .tbls.json schemas found in schemas/ directory")
             target_file = schemas[0]["file"]
 
         state = await ensure_liam_build(branch, target_file, refresh)

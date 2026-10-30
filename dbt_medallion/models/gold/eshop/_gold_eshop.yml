@@ -1,0 +1,108 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: One row per customer account, with default address and lifetime order stats.
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: email
+        data_tests: [unique, not_null]
+      - name: valid_orders_count
+        description: Orders that were not cancelled.
+      - name: lifetime_revenue
+        description: Sum of total_amount over non-cancelled orders.
+      - name: customer_segment
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["prospect", "one_time", "repeat"]
+
+  - name: dim_products
+    description: Storefront products enriched with their category hierarchy.
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: sku
+        data_tests: [unique, not_null]
+      - name: category_path
+        data_tests: [not_null]
+
+  - name: fct_orders
+    description: One row per order with item, shipping and payment totals.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: order_number
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: is_total_consistent
+        description: items_amount + shipping_cost equals the order header total_amount.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false
+      - name: paid_amount
+        description: Sum of completed payments.
+      - name: outstanding_amount
+        description: total_amount - paid_amount.
+      - name: latest_payment_status
+        description: Status of the most recently initiated payment attempt.
+
+  - name: fct_order_items
+    description: One row per order line, with historical vs current price.
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_id
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_id
+      - name: price_change_since_order
+        description: current_list_price - unit_price paid at checkout.
+
+  - name: fct_payments
+    description: One row per payment attempt.
+    columns:
+      - name: payment_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_id
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: seconds_to_capture
+        description: Seconds between payment initiation and capture (NULL if never captured).

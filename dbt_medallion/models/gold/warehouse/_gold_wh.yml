@@ -1,0 +1,173 @@
+version: 2
+
+models:
+  - name: dim_warehouses
+    description: One row per warehouse with topology and capacity rollups.
+    columns:
+      - name: warehouse_id
+        data_tests: [unique, not_null]
+      - name: warehouse_code
+        data_tests: [unique, not_null]
+      - name: sellable_locations_count
+        description: Bins whose stock can be promised to customers (see slv_wh__storage_locations.is_sellable).
+
+  - name: dim_storage_locations
+    description: One row per storage bin with zone and warehouse attributes.
+    columns:
+      - name: location_id
+        data_tests: [unique, not_null]
+      - name: location_code
+        data_tests: [unique, not_null]
+      - name: warehouse_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_warehouses')
+                field: warehouse_id
+
+  - name: dim_items
+    description: Warehouse item master with lot rollups.
+    columns:
+      - name: item_id
+        data_tests: [unique, not_null]
+      - name: sku
+        data_tests: [unique, not_null]
+      - name: next_expiration_date
+        description: Earliest expiration date among non-expired lots.
+
+  - name: dim_suppliers
+    description: Supplier master with inbound shipment rollups.
+    columns:
+      - name: supplier_id
+        data_tests: [unique, not_null]
+
+  - name: fct_inventory_snapshot
+    description: Current stock per bin and lot, with sellable quantity and replenishment flags.
+    columns:
+      - name: balance_id
+        data_tests: [unique, not_null]
+      - name: location_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_storage_locations')
+                field: location_id
+      - name: warehouse_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_warehouses')
+                field: warehouse_id
+      - name: item_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_items')
+                field: item_id
+      - name: quantity_sellable
+        description: quantity_available when the bin is sellable, otherwise 0.
+      - name: item_total_sellable_qty
+        description: Sellable quantity for the item summed across all bins and warehouses.
+      - name: is_item_below_min_stock
+        description: item_total_sellable_qty is below the item's min_stock_level (reorder point).
+      - name: is_expiring_soon
+        description: Lot expires within 60 days.
+
+  - name: fct_stock_movements
+    description: Stock movement ledger with SKU, bins and signed stock impact.
+    columns:
+      - name: movement_id
+        data_tests: [unique, not_null]
+      - name: item_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_items')
+                field: item_id
+      - name: from_location_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_storage_locations')
+                field: location_id
+      - name: to_location_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_storage_locations')
+                field: location_id
+      - name: warehouse_id
+        description: Warehouse of the destination bin, or of the source bin for outbound and write-off movements.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_warehouses')
+                field: warehouse_id
+      - name: stock_impact_qty
+        description: >
+          Change to total on-hand stock: positive for inbound receipts and positive adjustments, negative for
+          outbound picks and negative adjustments, 0 for internal moves (putaway, transfer, replenishment).
+        data_tests: [not_null]
+
+  - name: fct_inbound_receipts
+    description: One row per inbound shipment line with receiving variance and arrival delay.
+    columns:
+      - name: inbound_line_id
+        data_tests: [unique, not_null]
+      - name: warehouse_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_warehouses')
+                field: warehouse_id
+      - name: supplier_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_suppliers')
+                field: supplier_id
+      - name: item_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_items')
+                field: item_id
+      - name: arrival_delay_minutes
+        description: Minutes between expected truck arrival and receiving finalization.
+      - name: receipt_fill_rate
+        description: received_qty / expected_qty.
+      - name: is_short_delivery
+        description: Completed shipment where less was received than expected.
+
+  - name: fct_outbound_fulfillment
+    description: One row per outbound order line with allocation and pick performance.
+    columns:
+      - name: outbound_line_id
+        data_tests: [unique, not_null]
+      - name: warehouse_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_warehouses')
+                field: warehouse_id
+      - name: item_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_items')
+                field: item_id
+      - name: fill_rate
+        description: picked_qty / requested_qty.
+      - name: hours_to_ship
+        description: Hours from outbound order import to departure from the shipping dock.

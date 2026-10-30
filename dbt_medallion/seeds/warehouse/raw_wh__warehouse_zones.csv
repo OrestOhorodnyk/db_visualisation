@@ -1,0 +1,10 @@
+id,warehouse_id,code,name,type
+1,1,RCV-1,Receiving Dock,receiving
+2,1,ZONE-A,Bulk Storage A,bulk_storage
+3,1,PICK-A,Picking Area A,picking
+4,1,QRT-1,Quarantine,quarantine
+5,1,SHIP-1,Shipping Dock,shipping
+6,2,RCV-1,Receiving Dock,receiving
+7,2,PICK-K,Picking Area K,picking
+8,2,COLD-1,Cold Chamber 1,cold_storage
+9,3,ZONE-O,Bulk Storage O,bulk_storage

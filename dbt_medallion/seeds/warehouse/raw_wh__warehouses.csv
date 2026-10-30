@@ -1,0 +1,4 @@
+id,code,name,address,is_active,created_at
+1,WH-LWO-01,Lviv Distribution Center,"vul. Promyslova 7, Lviv",true,2024-03-01 08:00:00
+2,WH-KBP-01,Kyiv Fulfillment Hub,"vul. Kyivska 120, Boryspil",true,2025-02-15 08:00:00
+3,WH-ODS-01,Odesa Overflow Storage,"vul. Portova 3, Odesa",false,2024-09-10 08:00:00

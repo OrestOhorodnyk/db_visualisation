@@ -1,0 +1,314 @@
+version: 2
+
+models:
+  - name: brz_eshop__users
+    description: "E-shop users (bronze, 1:1 with source). Registered customer, manager, and administrator accounts"
+    columns:
+      - name: id
+        description: "Primary user identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: email
+        description: "Login email address"
+        data_type: varchar(255)
+        data_tests:
+          - not_null
+      - name: password_hash
+        description: "Bcrypt/Argon2 password hash"
+        data_type: varchar(255)
+        data_tests:
+          - not_null
+      - name: first_name
+        description: "User first name"
+        data_type: varchar(100)
+        data_tests:
+          - not_null
+      - name: last_name
+        description: "User last name"
+        data_type: varchar(100)
+        data_tests:
+          - not_null
+      - name: phone
+        description: "Contact phone number in E.164 format"
+        data_type: varchar(20)
+      - name: role
+        description: "Access role in the platform (enum user_role)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: created_at
+        description: "Account registration timestamp"
+        data_type: timestamp
+      - name: updated_at
+        description: "Last profile update timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_eshop__user_addresses
+    description: "E-shop user_addresses (bronze, 1:1 with source). Saved shipping and billing addresses for customers"
+    columns:
+      - name: id
+        description: "Primary address identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "Owner of this address"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: country
+        description: "Country name"
+        data_type: varchar(100)
+        data_tests:
+          - not_null
+      - name: city
+        description: "City or settlement name"
+        data_type: varchar(100)
+        data_tests:
+          - not_null
+      - name: street_address
+        description: "Street, building,apartment, or pickup branch"
+        data_type: varchar(255)
+        data_tests:
+          - not_null
+      - name: postal_code
+        description: "Postal / ZIP code"
+        data_type: varchar(20)
+      - name: is_default
+        description: "Whether this is the default shipping address for the user"
+        data_type: boolean
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_eshop__categories
+    description: "E-shop categories (bronze, 1:1 with source). Hierarchical product categories tree"
+    columns:
+      - name: id
+        description: "Primary category identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: parent_id
+        description: "Parent category ID for hierarchical catalog tree (NULL for root)"
+        data_type: integer
+      - name: name
+        description: "Display name of the category"
+        data_type: varchar(150)
+        data_tests:
+          - not_null
+      - name: slug
+        description: "URL-friendly category slug"
+        data_type: varchar(150)
+        data_tests:
+          - not_null
+      - name: description
+        description: "Category description shown on catalog page"
+        data_type: text
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_eshop__products
+    description: "E-shop products (bronze, 1:1 with source). Storefront product catalog with pricing and availability"
+    columns:
+      - name: id
+        description: "Primary product identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: category_id
+        description: "Primary catalog category"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: sku
+        description: "Unique stock keeping unit code"
+        data_type: varchar(50)
+        data_tests:
+          - not_null
+      - name: name
+        description: "Product title"
+        data_type: varchar(255)
+        data_tests:
+          - not_null
+      - name: slug
+        description: "SEO-friendly URL slug"
+        data_type: varchar(255)
+        data_tests:
+          - not_null
+      - name: description
+        description: "Detailed product specifications and marketing copy"
+        data_type: text
+      - name: price
+        description: "Current retail unit price"
+        data_type: decimal(10, 2)
+        data_tests:
+          - not_null
+      - name: stock_quantity
+        description: "Available inventory count for online sale"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: is_active
+        description: "Whether the product is visible in the storefront"
+        data_type: boolean
+        data_tests:
+          - not_null
+      - name: created_at
+        description: "Product creation timestamp"
+        data_type: timestamp
+      - name: updated_at
+        description: "Last product update timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_eshop__orders
+    description: "E-shop orders (bronze, 1:1 with source). Customer purchase orders header information"
+    columns:
+      - name: id
+        description: "Primary order identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: order_number
+        description: "Customer-facing order code (e.g., ORD-2026-00142)"
+        data_type: varchar(50)
+        data_tests:
+          - not_null
+      - name: user_id
+        description: "Customer who placed the order"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: shipping_address_id
+        description: "Selected delivery address"
+        data_type: integer
+      - name: status
+        description: "Current order lifecycle status (enum order_status)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: total_amount
+        description: "Final order total including items and shipping"
+        data_type: decimal(10, 2)
+        data_tests:
+          - not_null
+      - name: shipping_cost
+        description: "Delivery fee charged to the order"
+        data_type: decimal(10, 2)
+        data_tests:
+          - not_null
+      - name: customer_notes
+        description: "Optional delivery instructions from the customer"
+        data_type: text
+      - name: created_at
+        description: "Order placement timestamp"
+        data_type: timestamp
+      - name: updated_at
+        description: "Last status change timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_eshop__order_items
+    description: "E-shop order_items (bronze, 1:1 with source). Individual line items belonging to a customer order"
+    columns:
+      - name: id
+        description: "Primary order line item identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Parent order reference"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: product_id
+        description: "Purchased product reference"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: quantity
+        description: "Number of units purchased"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: unit_price
+        description: "Historical unit price locked at the moment of checkout"
+        data_type: decimal(10, 2)
+        data_tests:
+          - not_null
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_eshop__payments
+    description: "E-shop payments (bronze, 1:1 with source). Payment transactions and gateway statuses for orders"
+    columns:
+      - name: id
+        description: "Primary payment record identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Order being paid for"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: transaction_id
+        description: "External payment gateway transaction ID"
+        data_type: varchar(255)
+      - name: provider
+        description: "Payment gateway name (e.g., Stripe, LiqPay, MonoPay)"
+        data_type: varchar(50)
+      - name: method
+        description: "Selected payment method (enum payment_method)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: status
+        description: "Current payment processing status (enum payment_status)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: amount
+        description: "Transaction amount"
+        data_type: decimal(10, 2)
+        data_tests:
+          - not_null
+      - name: currency
+        description: "ISO 4217 currency code"
+        data_type: char(3)
+        data_tests:
+          - not_null
+      - name: paid_at
+        description: "Timestamp when payment was successfully captured"
+        data_type: timestamp
+      - name: created_at
+        description: "Payment initiation timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"

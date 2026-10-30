@@ -1,0 +1,245 @@
+version: 2
+
+# Raw landing tables for the e-shop and warehouse source systems; enum-like columns are landed as varchar.
+
+seeds:
+  # --- E-SHOP ---
+  - name: raw_eshop__users
+    description: Raw landing of e-shop `users`.
+    config:
+      column_types:
+        id: integer
+        email: varchar(255)
+        password_hash: varchar(255)
+        first_name: varchar(100)
+        last_name: varchar(100)
+        phone: varchar(20)
+        role: varchar
+        created_at: timestamp
+        updated_at: timestamp
+
+  - name: raw_eshop__user_addresses
+    description: Raw landing of e-shop `user_addresses`.
+    config:
+      column_types:
+        id: integer
+        user_id: integer
+        country: varchar(100)
+        city: varchar(100)
+        street_address: varchar(255)
+        postal_code: varchar(20)
+        is_default: boolean
+
+  - name: raw_eshop__categories
+    description: Raw landing of e-shop `categories`.
+    config:
+      column_types:
+        id: integer
+        parent_id: integer
+        name: varchar(150)
+        slug: varchar(150)
+        description: text
+
+  - name: raw_eshop__products
+    description: Raw landing of e-shop `products`.
+    config:
+      column_types:
+        id: integer
+        category_id: integer
+        sku: varchar(50)
+        name: varchar(255)
+        slug: varchar(255)
+        description: text
+        price: decimal(10, 2)
+        stock_quantity: integer
+        is_active: boolean
+        created_at: timestamp
+        updated_at: timestamp
+
+  - name: raw_eshop__orders
+    description: Raw landing of e-shop `orders`.
+    config:
+      column_types:
+        id: integer
+        order_number: varchar(50)
+        user_id: integer
+        shipping_address_id: integer
+        status: varchar
+        total_amount: decimal(10, 2)
+        shipping_cost: decimal(10, 2)
+        customer_notes: text
+        created_at: timestamp
+        updated_at: timestamp
+
+  - name: raw_eshop__order_items
+    description: Raw landing of e-shop `order_items`.
+    config:
+      column_types:
+        id: integer
+        order_id: integer
+        product_id: integer
+        quantity: integer
+        unit_price: decimal(10, 2)
+
+  - name: raw_eshop__payments
+    description: Raw landing of e-shop `payments`.
+    config:
+      column_types:
+        id: integer
+        order_id: integer
+        transaction_id: varchar(255)
+        provider: varchar(50)
+        method: varchar
+        status: varchar
+        amount: decimal(10, 2)
+        currency: char(3)
+        paid_at: timestamp
+        created_at: timestamp
+
+  # --- WAREHOUSE ---
+  - name: raw_wh__warehouses
+    description: Raw landing of warehouse `warehouses`.
+    config:
+      column_types:
+        id: integer
+        code: varchar(20)
+        name: varchar(150)
+        address: varchar(255)
+        is_active: boolean
+        created_at: timestamp
+
+  - name: raw_wh__warehouse_zones
+    description: Raw landing of warehouse `warehouse_zones`.
+    config:
+      column_types:
+        id: integer
+        warehouse_id: integer
+        code: varchar(20)
+        name: varchar(100)
+        type: varchar
+
+  - name: raw_wh__storage_locations
+    description: Raw landing of warehouse `storage_locations`.
+    config:
+      column_types:
+        id: integer
+        zone_id: integer
+        location_code: varchar(50)
+        aisle: varchar(10)
+        rack: varchar(10)
+        level: varchar(10)
+        bin: varchar(10)
+        max_weight_kg: decimal(10, 2)
+        max_volume_m3: decimal(10, 4)
+        is_blocked: boolean
+
+  - name: raw_wh__items
+    description: Raw landing of warehouse `items`.
+    config:
+      column_types:
+        id: integer
+        sku: varchar(50)
+        barcode: varchar(50)
+        name: varchar(255)
+        uom: varchar
+        gross_weight_kg: decimal(10, 3)
+        volume_m3: decimal(10, 6)
+        min_stock_level: integer
+        is_lot_tracked: boolean
+        created_at: timestamp
+
+  - name: raw_wh__item_lots
+    description: Raw landing of warehouse `item_lots`.
+    config:
+      column_types:
+        id: integer
+        item_id: integer
+        lot_number: varchar(100)
+        manufactured_date: date
+        expiration_date: date
+        created_at: timestamp
+
+  - name: raw_wh__inventory_balances
+    description: Raw landing of warehouse `inventory_balances`.
+    config:
+      column_types:
+        id: integer
+        location_id: integer
+        item_id: integer
+        lot_id: integer
+        quantity_on_hand: decimal(12, 3)
+        quantity_allocated: decimal(12, 3)
+        updated_at: timestamp
+
+  - name: raw_wh__suppliers
+    description: Raw landing of warehouse `suppliers`.
+    config:
+      column_types:
+        id: integer
+        name: varchar(200)
+        tax_id: varchar(50)
+        contact_email: varchar(150)
+        phone: varchar(30)
+
+  - name: raw_wh__inbound_shipments
+    description: Raw landing of warehouse `inbound_shipments`.
+    config:
+      column_types:
+        id: integer
+        receipt_number: varchar(50)
+        warehouse_id: integer
+        supplier_id: integer
+        status: varchar
+        expected_at: timestamp
+        received_at: timestamp
+        created_at: timestamp
+
+  - name: raw_wh__inbound_shipment_lines
+    description: Raw landing of warehouse `inbound_shipment_lines`.
+    config:
+      column_types:
+        id: integer
+        shipment_id: integer
+        item_id: integer
+        lot_id: integer
+        expected_qty: decimal(12, 3)
+        received_qty: decimal(12, 3)
+
+  - name: raw_wh__outbound_orders
+    description: Raw landing of warehouse `outbound_orders`.
+    config:
+      column_types:
+        id: integer
+        order_number: varchar(50)
+        warehouse_id: integer
+        external_order_ref: varchar(50)
+        status: varchar
+        priority: integer
+        shipped_at: timestamp
+        created_at: timestamp
+
+  - name: raw_wh__outbound_order_lines
+    description: Raw landing of warehouse `outbound_order_lines`.
+    config:
+      column_types:
+        id: integer
+        outbound_order_id: integer
+        item_id: integer
+        requested_qty: decimal(12, 3)
+        allocated_qty: decimal(12, 3)
+        picked_qty: decimal(12, 3)
+
+  - name: raw_wh__stock_movements
+    description: Raw landing of warehouse `stock_movements`.
+    config:
+      column_types:
+        id: bigint
+        item_id: integer
+        lot_id: integer
+        from_location_id: integer
+        to_location_id: integer
+        type: varchar
+        quantity: decimal(12, 3)
+        reference_doc: varchar(100)
+        performed_by: varchar(100)
+        created_at: timestamp

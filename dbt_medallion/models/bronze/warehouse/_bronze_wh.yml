@@ -1,0 +1,485 @@
+version: 2
+
+models:
+  - name: brz_wh__warehouses
+    description: "Warehouse warehouses (bronze, 1:1 with source). Physical warehouse facilities and distribution centers"
+    columns:
+      - name: id
+        description: "Primary warehouse identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: code
+        description: "Short facility code, e.g., WH-LWO-01"
+        data_type: varchar(20)
+        data_tests:
+          - not_null
+      - name: name
+        description: "Human-readable warehouse name"
+        data_type: varchar(150)
+        data_tests:
+          - not_null
+      - name: address
+        description: "Physical street address of the facility"
+        data_type: varchar(255)
+        data_tests:
+          - not_null
+      - name: is_active
+        description: "Whether the warehouse is currently operational"
+        data_type: boolean
+        data_tests:
+          - not_null
+      - name: created_at
+        description: "Record creation timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__warehouse_zones
+    description: "Warehouse warehouse_zones (bronze, 1:1 with source). Functional areas inside a warehouse (receiving docks, bulk storage, picking, cold chambers)"
+    columns:
+      - name: id
+        description: "Primary zone identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: warehouse_id
+        description: "Parent warehouse facility"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: code
+        description: "Zone code within the warehouse, e.g., ZONE-A, COLD-1"
+        data_type: varchar(20)
+        data_tests:
+          - not_null
+      - name: name
+        description: "Descriptive zone name"
+        data_type: varchar(100)
+        data_tests:
+          - not_null
+      - name: type
+        description: "Functional purpose and temperature regime of the zone (enum zone_type)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__storage_locations
+    description: "Warehouse storage_locations (bronze, 1:1 with source). Individual addressable storage bins and pallet slots"
+    columns:
+      - name: id
+        description: "Primary storage bin identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: zone_id
+        description: "Warehouse zone containing this bin"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: location_code
+        description: "Scannable bin barcode: A-01-03-02 (Aisle-Rack-Level-Bin)"
+        data_type: varchar(50)
+        data_tests:
+          - not_null
+      - name: aisle
+        description: "Aisle number or letter"
+        data_type: varchar(10)
+      - name: rack
+        description: "Rack identifier"
+        data_type: varchar(10)
+      - name: level
+        description: "Vertical shelf level"
+        data_type: varchar(10)
+      - name: bin
+        description: "Slot / bin position on the shelf"
+        data_type: varchar(10)
+      - name: max_weight_kg
+        description: "Maximum allowed load weight in kg"
+        data_type: decimal(10, 2)
+      - name: max_volume_m3
+        description: "Maximum usable volume in cubic meters"
+        data_type: decimal(10, 4)
+      - name: is_blocked
+        description: "Temporarily blocked for stocktake or rack maintenance"
+        data_type: boolean
+        data_tests:
+          - not_null
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__items
+    description: "Warehouse items (bronze, 1:1 with source). Master catalog of physical goods managed in the warehouse"
+    columns:
+      - name: id
+        description: "Primary item identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: sku
+        description: "Internal stock keeping unit code"
+        data_type: varchar(50)
+        data_tests:
+          - not_null
+      - name: barcode
+        description: "Manufacturer EAN-13 / UPC barcode"
+        data_type: varchar(50)
+      - name: name
+        description: "Full item name"
+        data_type: varchar(255)
+        data_tests:
+          - not_null
+      - name: uom
+        description: "Base unit of measure for stock tracking (enum unit_of_measure)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: gross_weight_kg
+        description: "Unit gross weight in kg (used for bin capacity checks)"
+        data_type: decimal(10, 3)
+      - name: volume_m3
+        description: "Unit volume in m3 (used for bin capacity checks)"
+        data_type: decimal(10, 6)
+      - name: min_stock_level
+        description: "Minimum safety stock threshold (reorder point)"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: is_lot_tracked
+        description: "Requires batch/lot and expiration date tracking"
+        data_type: boolean
+        data_tests:
+          - not_null
+      - name: created_at
+        description: "Item creation timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__item_lots
+    description: "Warehouse item_lots (bronze, 1:1 with source). Batch and lot tracking records with expiration dates for FEFO/FIFO"
+    columns:
+      - name: id
+        description: "Primary lot identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: item_id
+        description: "Item to which this lot belongs"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: lot_number
+        description: "Manufacturer batch, lot, or serial code"
+        data_type: varchar(100)
+        data_tests:
+          - not_null
+      - name: manufactured_date
+        description: "Date of manufacture"
+        data_type: date
+      - name: expiration_date
+        description: "Sell-by / expiration date used for FEFO picking rules"
+        data_type: date
+      - name: created_at
+        description: "Lot registration timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__inventory_balances
+    description: "Warehouse inventory_balances (bronze, 1:1 with source). Real-time snapshot of stock quantities per storage bin and lot"
+    columns:
+      - name: id
+        description: "Primary balance record identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: location_id
+        description: "Storage bin where stock is located"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: item_id
+        description: "Stored item reference"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: lot_id
+        description: "Specific batch/lot (NULL if item is not lot-tracked)"
+        data_type: integer
+      - name: quantity_on_hand
+        description: "Current physical quantity present in the bin"
+        data_type: decimal(12, 3)
+        data_tests:
+          - not_null
+      - name: quantity_allocated
+        description: "Quantity soft-reserved for active outbound picking tasks"
+        data_type: decimal(12, 3)
+        data_tests:
+          - not_null
+      - name: updated_at
+        description: "Timestamp of last stock balance update"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__suppliers
+    description: "Warehouse suppliers (bronze, 1:1 with source). External vendors and manufacturers supplying goods to the warehouse"
+    columns:
+      - name: id
+        description: "Primary supplier identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: name
+        description: "Legal company name of the vendor"
+        data_type: varchar(200)
+        data_tests:
+          - not_null
+      - name: tax_id
+        description: "Company tax identification / VAT number"
+        data_type: varchar(50)
+      - name: contact_email
+        description: "Account manager or logistics email"
+        data_type: varchar(150)
+      - name: phone
+        description: "Supplier contact phone number"
+        data_type: varchar(30)
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__inbound_shipments
+    description: "Warehouse inbound_shipments (bronze, 1:1 with source). Inbound deliveries (ASNs) arriving from suppliers"
+    columns:
+      - name: id
+        description: "Primary inbound shipment identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: receipt_number
+        description: "Inbound receipt / Advance Shipping Notice (ASN) number"
+        data_type: varchar(50)
+        data_tests:
+          - not_null
+      - name: warehouse_id
+        description: "Destination warehouse receiving the goods"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: supplier_id
+        description: "Supplier sending the shipment"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: status
+        description: "Current receiving workflow status (enum document_status)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: expected_at
+        description: "Scheduled truck arrival timestamp at loading dock"
+        data_type: timestamp
+      - name: received_at
+        description: "Timestamp when receiving was finalized"
+        data_type: timestamp
+      - name: created_at
+        description: "Document creation timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__inbound_shipment_lines
+    description: "Warehouse inbound_shipment_lines (bronze, 1:1 with source). Line items and quantities for inbound supplier shipments"
+    columns:
+      - name: id
+        description: "Primary inbound line identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: shipment_id
+        description: "Parent inbound shipment document"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: item_id
+        description: "Expected item reference"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: lot_id
+        description: "Assigned batch/lot upon receiving"
+        data_type: integer
+      - name: expected_qty
+        description: "Quantity declared in supplier shipping documents"
+        data_type: decimal(12, 3)
+        data_tests:
+          - not_null
+      - name: received_qty
+        description: "Actual quantity verified and scanned at receiving dock"
+        data_type: decimal(12, 3)
+        data_tests:
+          - not_null
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__outbound_orders
+    description: "Warehouse outbound_orders (bronze, 1:1 with source). Outbound fulfillment orders to be picked, packed, and shipped"
+    columns:
+      - name: id
+        description: "Primary outbound order identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: order_number
+        description: "Warehouse outbound wave / order number"
+        data_type: varchar(50)
+        data_tests:
+          - not_null
+      - name: warehouse_id
+        description: "Fulfillment warehouse"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: external_order_ref
+        description: "Customer order ID in external e-shop or ERP system"
+        data_type: varchar(50)
+      - name: status
+        description: "Fulfillment status (draft, picking, completed) (enum document_status)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: priority
+        description: "Dispatch priority (1 = urgent same-day, 5 = standard)"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: shipped_at
+        description: "Timestamp when order left the shipping dock"
+        data_type: timestamp
+      - name: created_at
+        description: "Order import timestamp"
+        data_type: timestamp
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__outbound_order_lines
+    description: "Warehouse outbound_order_lines (bronze, 1:1 with source). Individual items and picking progress for outbound orders"
+    columns:
+      - name: id
+        description: "Primary outbound line identifier"
+        data_type: integer
+        data_tests:
+          - unique
+          - not_null
+      - name: outbound_order_id
+        description: "Parent outbound order"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: item_id
+        description: "Item requested for shipment"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: requested_qty
+        description: "Quantity ordered by customer"
+        data_type: decimal(12, 3)
+        data_tests:
+          - not_null
+      - name: allocated_qty
+        description: "Quantity reserved in specific bins"
+        data_type: decimal(12, 3)
+        data_tests:
+          - not_null
+      - name: picked_qty
+        description: "Actual quantity picked by warehouse staff"
+        data_type: decimal(12, 3)
+        data_tests:
+          - not_null
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"
+
+  - name: brz_wh__stock_movements
+    description: "Warehouse stock_movements (bronze, 1:1 with source). Immutable audit ledger recording every physical movement and adjustment of stock"
+    columns:
+      - name: id
+        description: "Primary ledger transaction ID"
+        data_type: bigint
+        data_tests:
+          - unique
+          - not_null
+      - name: item_id
+        description: "Moved item reference"
+        data_type: integer
+        data_tests:
+          - not_null
+      - name: lot_id
+        description: "Moved batch/lot reference"
+        data_type: integer
+      - name: from_location_id
+        description: "Source storage bin (NULL for external inbound receipts)"
+        data_type: integer
+      - name: to_location_id
+        description: "Destination storage bin (NULL for outbound shipping or write-offs)"
+        data_type: integer
+      - name: type
+        description: "Classification of inventory movement (enum movement_type)"
+        data_type: varchar
+        data_tests:
+          - not_null
+      - name: quantity
+        description: "Moved quantity (always positive; direction is set by from/to bins)"
+        data_type: decimal(12, 3)
+        data_tests:
+          - not_null
+      - name: reference_doc
+        description: "Source document number (ASN, outbound order, stocktake sheet)"
+        data_type: varchar(100)
+      - name: performed_by
+        description: "Warehouse worker or RF barcode scanner ID"
+        data_type: varchar(100)
+        data_tests:
+          - not_null
+      - name: created_at
+        description: "Exact movement execution timestamp"
+        data_type: timestamp
+        data_tests:
+          - not_null
+      - name: _loaded_at
+        description: "Timestamp when the row was read into the bronze layer"
+      - name: _source_table
+        description: "Raw landing table the row came from"

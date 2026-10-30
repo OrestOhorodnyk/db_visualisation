@@ -1,0 +1,20 @@
+select
+    location_id,
+    location_code,
+    aisle,
+    rack,
+    level,
+    bin,
+    max_weight_kg,
+    max_volume_m3,
+    is_blocked,
+    is_sellable,
+    zone_id,
+    zone_code,
+    zone_name,
+    zone_type,
+    warehouse_id,
+    warehouse_code,
+    warehouse_name,
+    is_warehouse_active
+from {{ ref('slv_wh__storage_locations') }}

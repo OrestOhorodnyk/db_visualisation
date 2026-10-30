@@ -1,0 +1,9 @@
+id,category_id,sku,name,slug,description,price,stock_quantity,is_active,created_at,updated_at
+1,2,SKU-1001,Smartphone X12,smartphone-x12,"6.5"" OLED, 256 GB, 5G",15999.00,28,true,2025-05-01 09:00:00,2026-10-01 08:00:00
+2,2,SKU-1002,Smartphone Lite 8,smartphone-lite-8,"6.1"" LCD, 128 GB",8999.00,40,true,2025-05-01 09:00:00,2026-10-20 08:00:00
+3,3,SKU-1003,Laptop Pro 14,laptop-pro-14,"14"" 3K display, 32 GB RAM, 1 TB SSD",45999.00,10,true,2025-06-10 12:00:00,2026-09-12 19:00:00
+4,3,SKU-1004,Laptop Air 13,laptop-air-13,"13"" ultralight, 16 GB RAM",32999.00,0,true,2025-06-10 12:00:00,2026-10-28 07:00:00
+5,5,sku-1005 ,Espresso Machine E200,espresso-machine-e200,15 bar pump espresso machine with milk frother,12499.00,4,true,2025-09-01 10:00:00,2026-10-27 18:00:00
+6,6,SKU-1006,Phone Case Silicone,phone-case-silicone,Soft-touch silicone case for X12 and Lite 8,399.00,157,true,2025-05-15 09:00:00,2026-10-24 12:00:00
+7,6,SKU-1007,USB-C Fast Charger 30W,usb-c-fast-charger-30w,GaN 30W USB-C power adapter,749.00,120,true,2025-05-15 09:00:00,2026-10-05 17:00:00
+8,5,SKU-1008,Coffee Grinder G10,coffee-grinder-g10,Conical burr coffee grinder (discontinued),2899.00,0,false,2025-09-01 10:00:00,2026-10-02 09:00:00
