@@ -26,10 +26,14 @@ models:
       +schema: silver
       +materialized: table
       +tags: ["silver"]
+      +contract:
+        enforced: true
     gold:
       +schema: gold
       +materialized: table
       +tags: ["gold"]
+      +contract:
+        enforced: true
       eshop:
         +tags: ["eshop"]
       warehouse:

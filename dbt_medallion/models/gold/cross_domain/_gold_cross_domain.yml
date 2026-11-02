@@ -8,27 +8,73 @@ models:
     columns:
       - name: fulfillment_key
         description: E-shop order_number, or the warehouse outbound order number for warehouse-only orders.
+        data_type: varchar
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: order_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('fct_orders')
+            to_columns: [order_id]
+        config:
+          meta:
+            relationship_type: one-to-one
         data_tests:
           - unique
           - relationships:
               arguments:
                 to: ref('fct_orders')
                 field: order_id
+      - name: order_number
+        data_type: varchar
       - name: customer_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_customers')
+            to_columns: [customer_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_customers')
                 field: customer_id
+      - name: eshop_status
+        data_type: varchar
+      - name: ordered_at
+        data_type: timestamp
+      - name: total_amount
+        data_type: decimal(10,2)
+      - name: outbound_order_id
+        data_type: integer
+      - name: outbound_order_number
+        data_type: varchar
+      - name: external_order_ref
+        data_type: varchar
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_warehouses')
                 field: warehouse_id
+      - name: warehouse_code
+        data_type: varchar
+      - name: warehouse_status
+        data_type: varchar
+      - name: priority
+        data_type: integer
+      - name: warehouse_received_at
+        data_type: timestamp
+      - name: shipped_at
+        data_type: timestamp
       - name: match_status
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
@@ -36,10 +82,13 @@ models:
                 values: ["matched", "eshop_only", "warehouse_only"]
       - name: order_to_warehouse_hours
         description: Hours from e-shop order placement to outbound order import in the warehouse.
+        data_type: double
       - name: order_to_ship_hours
         description: Hours from e-shop order placement to departure from the warehouse shipping dock.
+        data_type: double
       - name: status_issue
         description: Reason the e-shop and warehouse statuses disagree (NULL when consistent).
+        data_type: varchar
         data_tests:
           - accepted_values:
               arguments:
@@ -49,6 +98,7 @@ models:
                   - cancelled_but_still_in_warehouse
                   - warehouse_shipped_status_not_updated
       - name: needs_attention
+        data_type: boolean
         data_tests: [not_null]
 
   - name: mart_product_stock_reconciliation
@@ -57,8 +107,19 @@ models:
       stock_quantity with the warehouse's sellable available quantity.
     columns:
       - name: sku
+        data_type: varchar
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: product_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_products')
+            to_columns: [product_id]
+        config:
+          meta:
+            relationship_type: one-to-one
         data_tests:
           - unique
           - relationships:
@@ -66,17 +127,42 @@ models:
                 to: ref('dim_products')
                 field: product_id
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_items')
+            to_columns: [item_id]
+        config:
+          meta:
+            relationship_type: one-to-one
         data_tests:
           - unique
           - relationships:
               arguments:
                 to: ref('dim_items')
                 field: item_id
+      - name: product_name
+        data_type: varchar
+      - name: category_path
+        data_type: varchar
+      - name: is_active
+        data_type: boolean
+      - name: storefront_stock_qty
+        data_type: integer
+      - name: warehouse_on_hand_qty
+        data_type: decimal(38,3)
+      - name: warehouse_allocated_qty
+        data_type: decimal(38,3)
       - name: warehouse_sellable_qty
         description: On-hand minus allocated, counted only in sellable bins.
+        data_type: decimal(38,3)
+      - name: min_stock_level
+        data_type: integer
       - name: stock_diff_qty
         description: storefront_stock_qty - warehouse_sellable_qty (positive means the storefront promises more than is available).
+        data_type: decimal(38,3)
       - name: reconciliation_status
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:

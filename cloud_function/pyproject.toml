@@ -1,7 +1,7 @@
 [project]
 name = "liam-erd-server"
 version = "0.1.0"
-description = "Dynamic multi-schema tbls JSON to Liam ERD FastAPI server for GCP Cloud Run and Confluence iframes"
+description = "Dynamic multi-schema DBML to Liam ERD FastAPI server for GCP Cloud Run and Confluence iframes"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",

@@ -5,169 +5,457 @@ models:
     description: One row per warehouse with topology and capacity rollups.
     columns:
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: warehouse_code
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: warehouse_name
+        data_type: varchar
+      - name: warehouse_address
+        data_type: varchar
+      - name: is_active
+        data_type: boolean
+      - name: zones_count
+        data_type: bigint
+      - name: locations_count
+        data_type: bigint
+      - name: blocked_locations_count
+        data_type: bigint
       - name: sellable_locations_count
         description: Bins whose stock can be promised to customers (see slv_wh__storage_locations.is_sellable).
+        data_type: bigint
+      - name: total_capacity_m3
+        data_type: decimal(38,4)
+      - name: created_at
+        data_type: timestamp
 
   - name: dim_storage_locations
     description: One row per storage bin with zone and warehouse attributes.
     columns:
       - name: location_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: location_code
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: aisle
+        data_type: varchar
+      - name: rack
+        data_type: varchar
+      - name: level
+        data_type: varchar
+      - name: bin
+        data_type: varchar
+      - name: max_weight_kg
+        data_type: decimal(10,2)
+      - name: max_volume_m3
+        data_type: decimal(10,4)
+      - name: is_blocked
+        data_type: boolean
+      - name: is_sellable
+        data_type: boolean
+      - name: zone_id
+        data_type: integer
+      - name: zone_code
+        data_type: varchar
+      - name: zone_name
+        data_type: varchar
+      - name: zone_type
+        data_type: varchar
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_warehouses')
                 field: warehouse_id
+      - name: warehouse_code
+        data_type: varchar
+      - name: warehouse_name
+        data_type: varchar
+      - name: is_warehouse_active
+        data_type: boolean
 
   - name: dim_items
     description: Warehouse item master with lot rollups.
     columns:
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: sku
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: barcode
+        data_type: varchar
+      - name: item_name
+        data_type: varchar
+      - name: uom
+        data_type: varchar
+      - name: gross_weight_kg
+        data_type: decimal(10,3)
+      - name: volume_m3
+        data_type: decimal(10,6)
+      - name: min_stock_level
+        data_type: integer
+      - name: is_lot_tracked
+        data_type: boolean
+      - name: lots_count
+        data_type: bigint
       - name: next_expiration_date
         description: Earliest expiration date among non-expired lots.
+        data_type: date
+      - name: created_at
+        data_type: timestamp
 
   - name: dim_suppliers
     description: Supplier master with inbound shipment rollups.
     columns:
       - name: supplier_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
+      - name: supplier_name
+        data_type: varchar
+      - name: tax_id
+        data_type: varchar
+      - name: contact_email
+        data_type: varchar
+      - name: phone
+        data_type: varchar
+      - name: shipments_count
+        data_type: bigint
+      - name: completed_shipments_count
+        data_type: bigint
+      - name: last_received_at
+        data_type: timestamp
 
   - name: fct_inventory_snapshot
     description: Current stock per bin and lot, with sellable quantity and replenishment flags.
     columns:
       - name: balance_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: location_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_storage_locations')
+            to_columns: [location_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_storage_locations')
                 field: location_id
+      - name: location_code
+        data_type: varchar
+      - name: zone_type
+        data_type: varchar
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_warehouses')
                 field: warehouse_id
+      - name: warehouse_code
+        data_type: varchar
+      - name: is_sellable
+        data_type: boolean
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_items')
                 field: item_id
+      - name: sku
+        data_type: varchar
+      - name: item_name
+        data_type: varchar
+      - name: min_stock_level
+        data_type: integer
+      - name: lot_id
+        data_type: integer
+      - name: lot_number
+        data_type: varchar
+      - name: expiration_date
+        data_type: date
+      - name: days_to_expiry
+        data_type: bigint
+      - name: quantity_on_hand
+        data_type: decimal(12,3)
+      - name: quantity_allocated
+        data_type: decimal(12,3)
+      - name: quantity_available
+        data_type: decimal(13,3)
       - name: quantity_sellable
         description: quantity_available when the bin is sellable, otherwise 0.
+        data_type: decimal(13,3)
+      - name: updated_at
+        data_type: timestamp
       - name: item_total_sellable_qty
         description: Sellable quantity for the item summed across all bins and warehouses.
+        data_type: decimal(38,3)
       - name: is_item_below_min_stock
         description: item_total_sellable_qty is below the item's min_stock_level (reorder point).
+        data_type: boolean
       - name: is_expiring_soon
         description: Lot expires within 60 days.
+        data_type: boolean
 
   - name: fct_stock_movements
     description: Stock movement ledger with SKU, bins and signed stock impact.
     columns:
       - name: movement_id
+        data_type: bigint
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
+      - name: moved_at
+        data_type: timestamp
+      - name: movement_date
+        data_type: date
+      - name: movement_type
+        data_type: varchar
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_items')
                 field: item_id
+      - name: sku
+        data_type: varchar
+      - name: lot_id
+        data_type: integer
+      - name: lot_number
+        data_type: varchar
       - name: from_location_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_storage_locations')
+            to_columns: [location_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_storage_locations')
                 field: location_id
+      - name: from_location_code
+        data_type: varchar
       - name: to_location_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_storage_locations')
+            to_columns: [location_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_storage_locations')
                 field: location_id
+      - name: to_location_code
+        data_type: varchar
       - name: warehouse_id
         description: Warehouse of the destination bin, or of the source bin for outbound and write-off movements.
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_warehouses')
                 field: warehouse_id
+      - name: warehouse_code
+        data_type: varchar
+      - name: quantity
+        data_type: decimal(12,3)
       - name: stock_impact_qty
         description: >
           Change to total on-hand stock: positive for inbound receipts and positive adjustments, negative for
           outbound picks and negative adjustments, 0 for internal moves (putaway, transfer, replenishment).
+        data_type: decimal(13,3)
         data_tests: [not_null]
+      - name: reference_doc
+        data_type: varchar
+      - name: performed_by
+        data_type: varchar
 
   - name: fct_inbound_receipts
     description: One row per inbound shipment line with receiving variance and arrival delay.
     columns:
       - name: inbound_line_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
+      - name: inbound_shipment_id
+        data_type: integer
+      - name: receipt_number
+        data_type: varchar
+      - name: shipment_status
+        data_type: varchar
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_warehouses')
                 field: warehouse_id
+      - name: warehouse_code
+        data_type: varchar
       - name: supplier_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_suppliers')
+            to_columns: [supplier_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_suppliers')
                 field: supplier_id
+      - name: supplier_name
+        data_type: varchar
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_items')
                 field: item_id
+      - name: sku
+        data_type: varchar
+      - name: lot_number
+        data_type: varchar
+      - name: expected_at
+        data_type: timestamp
+      - name: received_at
+        data_type: timestamp
       - name: arrival_delay_minutes
         description: Minutes between expected truck arrival and receiving finalization.
+        data_type: bigint
+      - name: expected_qty
+        data_type: decimal(12,3)
+      - name: received_qty
+        data_type: decimal(12,3)
+      - name: variance_qty
+        data_type: decimal(13,3)
       - name: receipt_fill_rate
         description: received_qty / expected_qty.
+        data_type: double
       - name: is_short_delivery
         description: Completed shipment where less was received than expected.
+        data_type: boolean
 
   - name: fct_outbound_fulfillment
     description: One row per outbound order line with allocation and pick performance.
     columns:
       - name: outbound_line_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
+      - name: outbound_order_id
+        data_type: integer
+      - name: outbound_order_number
+        data_type: varchar
+      - name: external_order_ref
+        data_type: varchar
+      - name: outbound_status
+        data_type: varchar
+      - name: priority
+        data_type: integer
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_warehouses')
                 field: warehouse_id
+      - name: warehouse_code
+        data_type: varchar
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_items')
                 field: item_id
+      - name: sku
+        data_type: varchar
+      - name: requested_qty
+        data_type: decimal(12,3)
+      - name: allocated_qty
+        data_type: decimal(12,3)
+      - name: picked_qty
+        data_type: decimal(12,3)
+      - name: allocation_rate
+        data_type: double
       - name: fill_rate
         description: picked_qty / requested_qty.
+        data_type: double
+      - name: is_fully_picked
+        data_type: boolean
+      - name: created_at
+        data_type: timestamp
+      - name: shipped_at
+        data_type: timestamp
       - name: hours_to_ship
         description: Hours from outbound order import to departure from the shipping dock.
+        data_type: double

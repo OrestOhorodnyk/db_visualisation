@@ -1,0 +1,215 @@
+//Tables (based on the selection criteria)
+//--configured at schema: medallion.silver
+Table "slv_wh__inbound_shipment_lines" {
+  "inbound_line_id" "integer"
+  "inbound_shipment_id" "integer"
+  "item_id" "integer"
+  "lot_id" "integer"
+  "expected_qty" "decimal(12,3)"
+  "received_qty" "decimal(12,3)"
+  "variance_qty" "decimal(13,3)" [note: "received_qty - expected_qty (negative means short delivery)."]
+
+  Note: "Cleaned inbound shipment lines with receiving variance."
+  indexes {
+    (inbound_line_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__inbound_shipments" {
+  "inbound_shipment_id" "integer"
+  "receipt_number" "varchar"
+  "warehouse_id" "integer"
+  "supplier_id" "integer"
+  "shipment_status" "varchar"
+  "expected_at" "timestamp"
+  "received_at" "timestamp"
+  "created_at" "timestamp"
+
+  Note: "Cleaned inbound shipment (ASN) headers."
+  indexes {
+    (inbound_shipment_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__inventory_balances" {
+  "balance_id" "integer"
+  "location_id" "integer"
+  "item_id" "integer"
+  "lot_id" "integer"
+  "quantity_on_hand" "decimal(12,3)"
+  "quantity_allocated" "decimal(12,3)"
+  "quantity_available" "decimal(13,3)" [note: "quantity_on_hand - quantity_allocated."]
+  "updated_at" "timestamp"
+
+  Note: "Stock balances per bin and lot with available quantity."
+  indexes {
+    (balance_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__item_lots" {
+  "lot_id" "integer"
+  "item_id" "integer"
+  "lot_number" "varchar"
+  "manufactured_date" "date"
+  "expiration_date" "date"
+  "days_to_expiry" "bigint" [note: "Days from today until expiration_date (negative when expired, NULL when no expiry)."]
+  "is_expired" "boolean"
+  "created_at" "timestamp"
+
+  Note: "Cleaned batch/lot records with expiry enrichment."
+  indexes {
+    (lot_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__items" {
+  "item_id" "integer"
+  "sku" "varchar" [note: "Normalized SKU, the conformed key shared with e-shop `products.sku`."]
+  "barcode" "varchar"
+  "item_name" "varchar"
+  "uom" "varchar"
+  "gross_weight_kg" "decimal(10,3)"
+  "volume_m3" "decimal(10,6)"
+  "min_stock_level" "integer"
+  "is_lot_tracked" "boolean"
+  "created_at" "timestamp"
+
+  Note: "Cleaned warehouse item master with normalized SKU."
+  indexes {
+    (item_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__outbound_order_lines" {
+  "outbound_line_id" "integer"
+  "outbound_order_id" "integer"
+  "item_id" "integer"
+  "requested_qty" "decimal(12,3)"
+  "allocated_qty" "decimal(12,3)"
+  "picked_qty" "decimal(12,3)"
+
+  Note: "Cleaned outbound order lines."
+  indexes {
+    (outbound_line_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__outbound_orders" {
+  "outbound_order_id" "integer"
+  "outbound_order_number" "varchar"
+  "warehouse_id" "integer"
+  "external_order_ref" "varchar" [note: "Upstream order reference; e-shop order_number for storefront orders."]
+  "outbound_status" "varchar"
+  "priority" "integer"
+  "shipped_at" "timestamp"
+  "created_at" "timestamp"
+
+  Note: "Cleaned outbound fulfillment order headers."
+  indexes {
+    (outbound_order_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__stock_movements" {
+  "movement_id" "bigint"
+  "item_id" "integer"
+  "lot_id" "integer"
+  "from_location_id" "integer"
+  "to_location_id" "integer"
+  "movement_type" "varchar"
+  "quantity" "decimal(12,3)"
+  "reference_doc" "varchar"
+  "performed_by" "varchar"
+  "moved_at" "timestamp"
+
+  Note: "Cleaned immutable stock movement ledger."
+  indexes {
+    (movement_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__storage_locations" {
+  "location_id" "integer"
+  "location_code" "varchar"
+  "aisle" "varchar"
+  "rack" "varchar"
+  "level" "varchar"
+  "bin" "varchar"
+  "max_weight_kg" "decimal(10,2)"
+  "max_volume_m3" "decimal(10,4)"
+  "is_blocked" "boolean"
+  "zone_id" "integer"
+  "zone_code" "varchar"
+  "zone_name" "varchar"
+  "zone_type" "varchar"
+  "warehouse_id" "integer"
+  "warehouse_code" "varchar"
+  "warehouse_name" "varchar"
+  "is_warehouse_active" "boolean"
+  "is_sellable" "boolean" [note: "True when stock in this bin can be promised to customers: the bin is not blocked, the warehouse is active, and the zone is bulk_storage, picking, or cold_storage.\n"]
+
+  Note: "Storage bins flattened with their zone and warehouse attributes."
+  indexes {
+    (location_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__suppliers" {
+  "supplier_id" "integer"
+  "supplier_name" "varchar"
+  "tax_id" "varchar"
+  "contact_email" "varchar"
+  "phone" "varchar"
+
+  Note: "Cleaned supplier master."
+  indexes {
+    (supplier_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__warehouse_zones" {
+  "zone_id" "integer"
+  "warehouse_id" "integer"
+  "zone_code" "varchar"
+  "zone_name" "varchar"
+  "zone_type" "varchar"
+
+  Note: "Cleaned functional zones inside warehouses."
+  indexes {
+    (zone_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_wh__warehouses" {
+  "warehouse_id" "integer"
+  "warehouse_code" "varchar"
+  "warehouse_name" "varchar"
+  "warehouse_address" "varchar"
+  "is_active" "boolean"
+  "created_at" "timestamp"
+
+  Note: "Cleaned warehouse facilities."
+  indexes {
+    (warehouse_id) [pk]
+  }
+}
+//Refs (based on the DBT Relationship Tests)
+Ref: "slv_wh__inbound_shipment_lines"."inbound_shipment_id" > "slv_wh__inbound_shipments"."inbound_shipment_id"
+Ref: "slv_wh__inbound_shipment_lines"."item_id" > "slv_wh__items"."item_id"
+Ref: "slv_wh__inbound_shipment_lines"."lot_id" > "slv_wh__item_lots"."lot_id"
+Ref: "slv_wh__inbound_shipments"."warehouse_id" > "slv_wh__warehouses"."warehouse_id"
+Ref: "slv_wh__inbound_shipments"."supplier_id" > "slv_wh__suppliers"."supplier_id"
+Ref: "slv_wh__inventory_balances"."location_id" > "slv_wh__storage_locations"."location_id"
+Ref: "slv_wh__inventory_balances"."item_id" > "slv_wh__items"."item_id"
+Ref: "slv_wh__inventory_balances"."lot_id" > "slv_wh__item_lots"."lot_id"
+Ref: "slv_wh__item_lots"."item_id" > "slv_wh__items"."item_id"
+Ref: "slv_wh__outbound_order_lines"."outbound_order_id" > "slv_wh__outbound_orders"."outbound_order_id"
+Ref: "slv_wh__outbound_order_lines"."item_id" > "slv_wh__items"."item_id"
+Ref: "slv_wh__outbound_orders"."warehouse_id" > "slv_wh__warehouses"."warehouse_id"
+Ref: "slv_wh__stock_movements"."item_id" > "slv_wh__items"."item_id"
+Ref: "slv_wh__stock_movements"."lot_id" > "slv_wh__item_lots"."lot_id"
+Ref: "slv_wh__stock_movements"."from_location_id" > "slv_wh__storage_locations"."location_id"
+Ref: "slv_wh__stock_movements"."to_location_id" > "slv_wh__storage_locations"."location_id"
+Ref: "slv_wh__storage_locations"."zone_id" > "slv_wh__warehouse_zones"."zone_id"
+Ref: "slv_wh__warehouse_zones"."warehouse_id" > "slv_wh__warehouses"."warehouse_id"

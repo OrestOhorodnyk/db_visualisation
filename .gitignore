@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Liam ERD build output and intermediate tbls JSON (schemas/ holds only DBML)
+dist/
+*.tbls.json
+
+# Secrets
+.env
+.env.*
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

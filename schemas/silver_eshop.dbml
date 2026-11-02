@@ -1,0 +1,129 @@
+//Tables (based on the selection criteria)
+//--configured at schema: medallion.silver
+Table "slv_eshop__categories" {
+  "category_id" "integer"
+  "parent_category_id" "integer" [note: "Self-reference to category_id. No foreign_key constraint, because dbt treats a constraint ref to the same model as a DAG cycle."]
+  "category_name" "varchar"
+  "category_slug" "varchar"
+  "category_description" "varchar"
+  "category_depth" "integer" [note: "0 for root categories, incremented per level."]
+  "root_category_name" "varchar" [note: "Name of the top-level ancestor category."]
+  "category_path" "varchar" [note: "Breadcrumb from root to this category, e.g. 'Electronics > Smartphones'."]
+  "is_root" "boolean"
+
+  Note: "Category tree flattened with a recursive CTE into a full breadcrumb path and root category."
+  indexes {
+    (category_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_eshop__order_items" {
+  "order_item_id" "integer"
+  "order_id" "integer"
+  "product_id" "integer"
+  "quantity" "integer"
+  "unit_price" "decimal(10,2)"
+  "line_amount" "decimal(18,2)" [note: "quantity * unit_price."]
+
+  Note: "Cleaned order lines with computed line amount."
+  indexes {
+    (order_item_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_eshop__orders" {
+  "order_id" "integer"
+  "order_number" "varchar" [note: "Customer-facing order code; matches warehouse `outbound_orders.external_order_ref`."]
+  "user_id" "integer"
+  "shipping_address_id" "integer"
+  "order_status" "varchar"
+  "total_amount" "decimal(10,2)"
+  "shipping_cost" "decimal(10,2)"
+  "items_amount_declared" "decimal(11,2)" [note: "total_amount minus shipping_cost, as declared on the order header."]
+  "customer_notes" "varchar"
+  "is_cancelled" "boolean"
+  "ordered_at" "timestamp" [note: "Order placement timestamp."]
+  "updated_at" "timestamp"
+
+  Note: "Cleaned order headers."
+  indexes {
+    (order_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_eshop__payments" {
+  "payment_id" "integer"
+  "order_id" "integer"
+  "transaction_id" "varchar"
+  "payment_provider" "varchar"
+  "payment_method" "varchar"
+  "payment_status" "varchar"
+  "amount" "decimal(10,2)"
+  "currency" "varchar" [note: "Upper-cased ISO 4217 code."]
+  "paid_at" "timestamp"
+  "initiated_at" "timestamp"
+
+  Note: "Cleaned payment transactions."
+  indexes {
+    (payment_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_eshop__products" {
+  "product_id" "integer"
+  "category_id" "integer"
+  "sku" "varchar" [note: "Normalized SKU, the conformed key shared with the warehouse `items.sku`."]
+  "product_name" "varchar"
+  "product_slug" "varchar"
+  "product_description" "varchar"
+  "list_price" "decimal(10,2)" [note: "Current retail unit price."]
+  "stock_quantity" "integer"
+  "is_active" "boolean"
+  "created_at" "timestamp"
+  "updated_at" "timestamp"
+
+  Note: "Cleaned storefront products with normalized (upper-cased, trimmed) SKU."
+  indexes {
+    (product_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_eshop__user_addresses" {
+  "address_id" "integer"
+  "user_id" "integer"
+  "country" "varchar"
+  "city" "varchar"
+  "street_address" "varchar"
+  "postal_code" "varchar"
+  "is_default" "boolean"
+
+  Note: "Cleaned customer shipping and billing addresses."
+  indexes {
+    (address_id) [pk]
+  }
+}
+//--configured at schema: medallion.silver
+Table "slv_eshop__users" {
+  "user_id" "integer"
+  "email" "varchar" [note: "Trimmed, lower-cased login email."]
+  "first_name" "varchar"
+  "last_name" "varchar"
+  "full_name" "varchar" [note: "First and last name concatenated."]
+  "phone" "varchar"
+  "user_role" "varchar"
+  "created_at" "timestamp"
+  "updated_at" "timestamp"
+
+  Note: "Cleaned platform accounts (customers, managers, admins). Password hashes are dropped at this layer."
+  indexes {
+    (user_id) [pk]
+  }
+}
+//Refs (based on the DBT Relationship Tests)
+Ref: "slv_eshop__order_items"."order_id" > "slv_eshop__orders"."order_id"
+Ref: "slv_eshop__order_items"."product_id" > "slv_eshop__products"."product_id"
+Ref: "slv_eshop__orders"."user_id" > "slv_eshop__users"."user_id"
+Ref: "slv_eshop__orders"."shipping_address_id" > "slv_eshop__user_addresses"."address_id"
+Ref: "slv_eshop__payments"."order_id" > "slv_eshop__orders"."order_id"
+Ref: "slv_eshop__products"."category_id" > "slv_eshop__categories"."category_id"
+Ref: "slv_eshop__user_addresses"."user_id" > "slv_eshop__users"."user_id"

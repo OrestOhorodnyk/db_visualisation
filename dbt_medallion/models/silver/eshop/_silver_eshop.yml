@@ -5,82 +5,163 @@ models:
     description: Cleaned platform accounts (customers, managers, admins). Password hashes are dropped at this layer.
     columns:
       - name: user_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: email
         description: Trimmed, lower-cased login email.
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: first_name
+        data_type: varchar
+      - name: last_name
+        data_type: varchar
       - name: full_name
         description: First and last name concatenated.
+        data_type: varchar
+      - name: phone
+        data_type: varchar
       - name: user_role
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: ["customer", "admin", "manager"]
+      - name: created_at
+        data_type: timestamp
+      - name: updated_at
+        data_type: timestamp
 
   - name: slv_eshop__user_addresses
     description: Cleaned customer shipping and billing addresses.
     columns:
       - name: address_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: user_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_eshop__users')
+            to_columns: [user_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('slv_eshop__users')
                 field: user_id
+      - name: country
+        data_type: varchar
+      - name: city
+        data_type: varchar
+      - name: street_address
+        data_type: varchar
+      - name: postal_code
+        data_type: varchar
       - name: is_default
+        data_type: boolean
         data_tests: [not_null]
 
   - name: slv_eshop__categories
     description: Category tree flattened with a recursive CTE into a full breadcrumb path and root category.
     columns:
       - name: category_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: parent_category_id
+        description: Self-reference to category_id. No foreign_key constraint, because dbt treats a constraint ref to the same model as a DAG cycle.
+        data_type: integer
         data_tests:
           - relationships:
               arguments:
                 to: ref('slv_eshop__categories')
                 field: category_id
+      - name: category_name
+        data_type: varchar
       - name: category_slug
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: category_description
+        data_type: varchar
       - name: category_depth
         description: 0 for root categories, incremented per level.
+        data_type: integer
       - name: root_category_name
         description: Name of the top-level ancestor category.
+        data_type: varchar
       - name: category_path
         description: "Breadcrumb from root to this category, e.g. 'Electronics > Smartphones'."
+        data_type: varchar
+      - name: is_root
+        data_type: boolean
 
   - name: slv_eshop__products
     description: Cleaned storefront products with normalized (upper-cased, trimmed) SKU.
     columns:
       - name: product_id
-        data_tests: [unique, not_null]
-      - name: sku
-        description: Normalized SKU, the conformed key shared with the warehouse `items.sku`.
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: category_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_eshop__categories')
+            to_columns: [category_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('slv_eshop__categories')
                 field: category_id
+      - name: sku
+        description: Normalized SKU, the conformed key shared with the warehouse `items.sku`.
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: product_name
+        data_type: varchar
+      - name: product_slug
+        data_type: varchar
+      - name: product_description
+        data_type: varchar
       - name: list_price
         description: Current retail unit price.
+        data_type: decimal(10,2)
         data_tests: [not_null]
+      - name: stock_quantity
+        data_type: integer
+      - name: is_active
+        data_type: boolean
+      - name: created_at
+        data_type: timestamp
+      - name: updated_at
+        data_type: timestamp
 
   - name: slv_eshop__orders
     description: Cleaned order headers.
     columns:
       - name: order_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: order_number
         description: Customer-facing order code; matches warehouse `outbound_orders.external_order_ref`.
+        data_type: varchar
         data_tests: [unique, not_null]
       - name: user_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_eshop__users')
+            to_columns: [user_id]
         data_tests:
           - not_null
           - relationships:
@@ -88,28 +169,54 @@ models:
                 to: ref('slv_eshop__users')
                 field: user_id
       - name: shipping_address_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_eshop__user_addresses')
+            to_columns: [address_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('slv_eshop__user_addresses')
                 field: address_id
       - name: order_status
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: ["pending", "paid", "processing", "shipped", "delivered", "cancelled"]
+      - name: total_amount
+        data_type: decimal(10,2)
+      - name: shipping_cost
+        data_type: decimal(10,2)
       - name: items_amount_declared
         description: total_amount minus shipping_cost, as declared on the order header.
+        data_type: decimal(11,2)
+      - name: customer_notes
+        data_type: varchar
+      - name: is_cancelled
+        data_type: boolean
       - name: ordered_at
         description: Order placement timestamp.
+        data_type: timestamp
+      - name: updated_at
+        data_type: timestamp
 
   - name: slv_eshop__order_items
     description: Cleaned order lines with computed line amount.
     columns:
       - name: order_item_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: order_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_eshop__orders')
+            to_columns: [order_id]
         data_tests:
           - not_null
           - relationships:
@@ -117,21 +224,39 @@ models:
                 to: ref('slv_eshop__orders')
                 field: order_id
       - name: product_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_eshop__products')
+            to_columns: [product_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('slv_eshop__products')
                 field: product_id
+      - name: quantity
+        data_type: integer
+      - name: unit_price
+        data_type: decimal(10,2)
       - name: line_amount
         description: quantity * unit_price.
+        data_type: decimal(18,2)
 
   - name: slv_eshop__payments
     description: Cleaned payment transactions.
     columns:
       - name: payment_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: order_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_eshop__orders')
+            to_columns: [order_id]
         data_tests:
           - not_null
           - relationships:
@@ -139,19 +264,31 @@ models:
                 to: ref('slv_eshop__orders')
                 field: order_id
       - name: transaction_id
+        data_type: varchar
         data_tests: [unique]
+      - name: payment_provider
+        data_type: varchar
       - name: payment_method
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: ["card", "bank_transfer", "cash_on_delivery"]
       - name: payment_status
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: ["pending", "completed", "failed", "refunded"]
+      - name: amount
+        data_type: decimal(10,2)
       - name: currency
         description: Upper-cased ISO 4217 code.
+        data_type: varchar
         data_tests: [not_null]
+      - name: paid_at
+        data_type: timestamp
+      - name: initiated_at
+        data_type: timestamp

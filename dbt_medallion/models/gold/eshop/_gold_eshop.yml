@@ -5,70 +5,186 @@ models:
     description: One row per customer account, with default address and lifetime order stats.
     columns:
       - name: customer_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: email
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: first_name
+        data_type: varchar
+      - name: last_name
+        data_type: varchar
+      - name: full_name
+        data_type: varchar
+      - name: phone
+        data_type: varchar
+      - name: default_country
+        data_type: varchar
+      - name: default_city
+        data_type: varchar
+      - name: default_postal_code
+        data_type: varchar
+      - name: orders_count
+        data_type: bigint
       - name: valid_orders_count
         description: Orders that were not cancelled.
+        data_type: bigint
       - name: lifetime_revenue
         description: Sum of total_amount over non-cancelled orders.
+        data_type: decimal(38,2)
+      - name: first_ordered_at
+        data_type: timestamp
+      - name: last_ordered_at
+        data_type: timestamp
       - name: customer_segment
+        data_type: varchar
         data_tests:
           - accepted_values:
               arguments:
                 values: ["prospect", "one_time", "repeat"]
+      - name: registered_at
+        data_type: timestamp
 
   - name: dim_products
     description: Storefront products enriched with their category hierarchy.
     columns:
       - name: product_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: sku
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: product_name
+        data_type: varchar
+      - name: product_slug
+        data_type: varchar
+      - name: list_price
+        data_type: decimal(10,2)
+      - name: storefront_stock_qty
+        data_type: integer
+      - name: is_active
+        data_type: boolean
+      - name: category_id
+        data_type: integer
+      - name: category_name
+        data_type: varchar
+      - name: root_category_name
+        data_type: varchar
       - name: category_path
+        data_type: varchar
         data_tests: [not_null]
+      - name: created_at
+        data_type: timestamp
+      - name: updated_at
+        data_type: timestamp
 
   - name: fct_orders
     description: One row per order with item, shipping and payment totals.
     columns:
       - name: order_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: order_number
+        data_type: varchar
         data_tests: [unique, not_null]
       - name: customer_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_customers')
+            to_columns: [customer_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_customers')
                 field: customer_id
+      - name: shipping_address_id
+        data_type: integer
+      - name: ship_country
+        data_type: varchar
+      - name: ship_city
+        data_type: varchar
+      - name: order_status
+        data_type: varchar
+      - name: is_cancelled
+        data_type: boolean
+      - name: ordered_at
+        data_type: timestamp
+      - name: order_date
+        data_type: date
+      - name: line_count
+        data_type: bigint
+      - name: units_count
+        data_type: hugeint
+      - name: items_amount
+        data_type: decimal(38,2)
+      - name: shipping_cost
+        data_type: decimal(10,2)
+      - name: total_amount
+        data_type: decimal(10,2)
       - name: is_total_consistent
         description: items_amount + shipping_cost equals the order header total_amount.
+        data_type: boolean
         data_tests:
           - accepted_values:
               arguments:
                 values: [true]
                 quote: false
+      - name: payment_attempts
+        data_type: bigint
       - name: paid_amount
         description: Sum of completed payments.
+        data_type: decimal(38,2)
+      - name: refunded_amount
+        data_type: decimal(38,2)
       - name: outstanding_amount
         description: total_amount - paid_amount.
+        data_type: decimal(38,2)
+      - name: is_fully_paid
+        data_type: boolean
       - name: latest_payment_status
         description: Status of the most recently initiated payment attempt.
+        data_type: varchar
+      - name: latest_payment_method
+        data_type: varchar
+      - name: last_paid_at
+        data_type: timestamp
 
   - name: fct_order_items
     description: One row per order line, with historical vs current price.
     columns:
       - name: order_item_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: order_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('fct_orders')
+            to_columns: [order_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('fct_orders')
                 field: order_id
+      - name: order_number
+        data_type: varchar
       - name: customer_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_customers')
+            to_columns: [customer_id]
         data_tests:
           - not_null
           - relationships:
@@ -76,33 +192,91 @@ models:
                 to: ref('dim_customers')
                 field: customer_id
       - name: product_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_products')
+            to_columns: [product_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_products')
                 field: product_id
+      - name: sku
+        data_type: varchar
+      - name: ordered_at
+        data_type: timestamp
+      - name: order_date
+        data_type: date
+      - name: order_status
+        data_type: varchar
+      - name: is_cancelled
+        data_type: boolean
+      - name: quantity
+        data_type: integer
+      - name: unit_price
+        data_type: decimal(10,2)
+      - name: line_amount
+        data_type: decimal(18,2)
+      - name: current_list_price
+        data_type: decimal(10,2)
       - name: price_change_since_order
         description: current_list_price - unit_price paid at checkout.
+        data_type: decimal(11,2)
 
   - name: fct_payments
     description: One row per payment attempt.
     columns:
       - name: payment_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: order_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('fct_orders')
+            to_columns: [order_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('fct_orders')
                 field: order_id
+      - name: order_number
+        data_type: varchar
       - name: customer_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('dim_customers')
+            to_columns: [customer_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('dim_customers')
                 field: customer_id
+      - name: transaction_id
+        data_type: varchar
+      - name: payment_provider
+        data_type: varchar
+      - name: payment_method
+        data_type: varchar
+      - name: payment_status
+        data_type: varchar
+      - name: is_successful
+        data_type: boolean
+      - name: amount
+        data_type: decimal(10,2)
+      - name: currency
+        data_type: varchar
+      - name: initiated_at
+        data_type: timestamp
+      - name: paid_at
+        data_type: timestamp
       - name: seconds_to_capture
         description: Seconds between payment initiation and capture (NULL if never captured).
+        data_type: bigint

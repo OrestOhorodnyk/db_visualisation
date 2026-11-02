@@ -47,8 +47,8 @@ CACHE_TTL_SECONDS = float(os.environ.get("CACHE_TTL_SECONDS", "15"))
 FRAME_ANCESTORS = os.environ.get("FRAME_ANCESTORS", "'self' https://*.atlassian.net")
 ACCESS_KEY = os.environ.get("ACCESS_KEY", "")
 
-# Schemas are tbls JSON files (exported from dbt by dbt_medallion/scripts/export_tbls.py)
-TBLS_EXT = ".tbls.json"
+# Schemas are DBML files (exported from dbt by dbt_medallion/scripts/export_erd.sh with dbterd)
+SCHEMA_EXT = ".dbml"
 
 MIME_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -66,7 +66,7 @@ MIME_TYPES = {
 
 app = FastAPI(
     title="Liam ERD Multi-Schema Server",
-    description="Dynamic tbls JSON to Liam ERD server for GCP Cloud Run and Confluence iframes",
+    description="Dynamic DBML to Liam ERD server for GCP Cloud Run and Confluence iframes",
     docs_url="/api/docs",
     redoc_url=None,
 )
@@ -91,21 +91,21 @@ def get_key_lock(cache_key: str) -> asyncio.Lock:
 
 
 def schema_name_from_file(file_name: str) -> str:
-    return posixpath.basename(file_name).removesuffix(TBLS_EXT)
+    return posixpath.basename(file_name).removesuffix(SCHEMA_EXT)
 
 
 def schema_entries(file_paths: list[str]) -> list[dict[str, str]]:
     return [
         {"name": schema_name_from_file(path), "file": path}
         for path in sorted(file_paths)
-        if path.endswith(TBLS_EXT)
+        if path.endswith(SCHEMA_EXT)
     ]
 
 
 def normalize_schema_file(raw_input: str) -> str:
     """
     Resolves a short schema name (e.g., 'gold_marts' or 'silver_eshop')
-    into a normalized relative repository path ('schemas/gold_marts.tbls.json').
+    into a normalized relative repository path ('schemas/gold_marts.dbml').
     """
     if not raw_input:
         return ""
@@ -115,8 +115,8 @@ def normalize_schema_file(raw_input: str) -> str:
         clean = clean[3:] if clean.startswith("../") else ""
     if not clean or clean == ".":
         return ""
-    if not clean.endswith(TBLS_EXT):
-        clean += TBLS_EXT
+    if not clean.endswith(SCHEMA_EXT):
+        clean += SCHEMA_EXT
     if "/" not in clean:
         clean = f"{SCHEMAS_DIR}/{clean}"
     return clean
@@ -124,7 +124,7 @@ def normalize_schema_file(raw_input: str) -> str:
 
 async def list_available_schemas(branch: str) -> list[dict[str, str]]:
     """
-    Returns a list of available .tbls.json schemas from GitHub, GitLab, or local schemas/ directory.
+    Returns a list of available .dbml schemas from GitHub, GitLab, or local schemas/ directory.
     """
     headers = {"User-Agent": "liam-erd-fastapi"}
 
@@ -176,7 +176,7 @@ async def list_available_schemas(branch: str) -> list[dict[str, str]]:
 
 async def fetch_schema_file(branch: str, file_path: str) -> tuple[str, str]:
     """
-    Fetches the latest content of a specific .tbls.json file from Git or local directory.
+    Fetches the latest content of a specific .dbml file from Git or local directory.
     Raises FileNotFoundError when the file does not exist. Returns (content, source_description).
     """
     clean_file = normalize_schema_file(file_path)
@@ -261,7 +261,7 @@ async def ensure_liam_build(
     branch: str, raw_file_path: str, force_refresh: bool = False
 ) -> dict:
     """
-    Checks whether the .tbls.json file has changed and rebuilds Liam ERD for the schema if needed.
+    Checks whether the .dbml file has changed and rebuilds Liam ERD for the schema if needed.
     """
     file_path = normalize_schema_file(raw_file_path)
     cache_key = f"{branch}:{file_path}"
@@ -321,14 +321,21 @@ async def ensure_liam_build(
         tmp_work_dir.mkdir(parents=True, exist_ok=True)
 
         try:
+            tmp_dbml_path = tmp_work_dir / "schema.dbml"
             tmp_tbls_path = tmp_work_dir / "schema.tbls.json"
             tmp_dist_dir = tmp_work_dir / "dist"
+            converter_script = Path(__file__).resolve().parent / "dbml_to_tbls.js"
 
-            try:
-                json.loads(schema_content)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(f'Invalid tbls JSON in "{file_path}": {exc}') from exc
-            tmp_tbls_path.write_text(schema_content, encoding="utf-8")
+            tmp_dbml_path.write_text(schema_content, encoding="utf-8")
+
+            rc, out, err = await run_cli_command(
+                ["node", str(converter_script), "schema.dbml", "schema.tbls.json"],
+                cwd=tmp_work_dir,
+            )
+            if rc != 0 or not tmp_tbls_path.is_file():
+                raise RuntimeError(
+                    f'DBML syntax error in "{file_path}":\n{out}\n{err}'.strip()
+                )
 
             rc, out, err = await run_cli_command(
                 [
@@ -517,7 +524,7 @@ def render_schema_directory_html(
     cards_section = (
         "\n".join(rows_html)
         if rows_html
-        else "<p>No .tbls.json files found in schemas/ directory.</p>"
+        else "<p>No .dbml files found in schemas/ directory.</p>"
     )
 
     return f"""<!DOCTYPE html>
@@ -677,7 +684,7 @@ async def serve_erd_or_asset(
         if not target_file:
             schemas = await list_available_schemas(branch)
             if not schemas:
-                raise FileNotFoundError("No .tbls.json schemas found in schemas/ directory")
+                raise FileNotFoundError("No .dbml schemas found in schemas/ directory")
             target_file = schemas[0]["file"]
 
         state = await ensure_liam_build(branch, target_file, refresh)

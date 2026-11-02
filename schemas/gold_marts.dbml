@@ -1,0 +1,390 @@
+//Tables (based on the selection criteria)
+//--configured at schema: medallion.gold
+Table "dim_customers" {
+  "customer_id" "integer"
+  "email" "varchar"
+  "first_name" "varchar"
+  "last_name" "varchar"
+  "full_name" "varchar"
+  "phone" "varchar"
+  "default_country" "varchar"
+  "default_city" "varchar"
+  "default_postal_code" "varchar"
+  "orders_count" "bigint"
+  "valid_orders_count" "bigint" [note: "Orders that were not cancelled."]
+  "lifetime_revenue" "decimal(38,2)" [note: "Sum of total_amount over non-cancelled orders."]
+  "first_ordered_at" "timestamp"
+  "last_ordered_at" "timestamp"
+  "customer_segment" "varchar"
+  "registered_at" "timestamp"
+
+  Note: "One row per customer account, with default address and lifetime order stats."
+  indexes {
+    (customer_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "dim_items" {
+  "item_id" "integer"
+  "sku" "varchar"
+  "barcode" "varchar"
+  "item_name" "varchar"
+  "uom" "varchar"
+  "gross_weight_kg" "decimal(10,3)"
+  "volume_m3" "decimal(10,6)"
+  "min_stock_level" "integer"
+  "is_lot_tracked" "boolean"
+  "lots_count" "bigint"
+  "next_expiration_date" "date" [note: "Earliest expiration date among non-expired lots."]
+  "created_at" "timestamp"
+
+  Note: "Warehouse item master with lot rollups."
+  indexes {
+    (item_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "dim_products" {
+  "product_id" "integer"
+  "sku" "varchar"
+  "product_name" "varchar"
+  "product_slug" "varchar"
+  "list_price" "decimal(10,2)"
+  "storefront_stock_qty" "integer"
+  "is_active" "boolean"
+  "category_id" "integer"
+  "category_name" "varchar"
+  "root_category_name" "varchar"
+  "category_path" "varchar"
+  "created_at" "timestamp"
+  "updated_at" "timestamp"
+
+  Note: "Storefront products enriched with their category hierarchy."
+  indexes {
+    (product_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "dim_storage_locations" {
+  "location_id" "integer"
+  "location_code" "varchar"
+  "aisle" "varchar"
+  "rack" "varchar"
+  "level" "varchar"
+  "bin" "varchar"
+  "max_weight_kg" "decimal(10,2)"
+  "max_volume_m3" "decimal(10,4)"
+  "is_blocked" "boolean"
+  "is_sellable" "boolean"
+  "zone_id" "integer"
+  "zone_code" "varchar"
+  "zone_name" "varchar"
+  "zone_type" "varchar"
+  "warehouse_id" "integer"
+  "warehouse_code" "varchar"
+  "warehouse_name" "varchar"
+  "is_warehouse_active" "boolean"
+
+  Note: "One row per storage bin with zone and warehouse attributes."
+  indexes {
+    (location_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "dim_suppliers" {
+  "supplier_id" "integer"
+  "supplier_name" "varchar"
+  "tax_id" "varchar"
+  "contact_email" "varchar"
+  "phone" "varchar"
+  "shipments_count" "bigint"
+  "completed_shipments_count" "bigint"
+  "last_received_at" "timestamp"
+
+  Note: "Supplier master with inbound shipment rollups."
+  indexes {
+    (supplier_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "dim_warehouses" {
+  "warehouse_id" "integer"
+  "warehouse_code" "varchar"
+  "warehouse_name" "varchar"
+  "warehouse_address" "varchar"
+  "is_active" "boolean"
+  "zones_count" "bigint"
+  "locations_count" "bigint"
+  "blocked_locations_count" "bigint"
+  "sellable_locations_count" "bigint" [note: "Bins whose stock can be promised to customers (see slv_wh__storage_locations.is_sellable)."]
+  "total_capacity_m3" "decimal(38,4)"
+  "created_at" "timestamp"
+
+  Note: "One row per warehouse with topology and capacity rollups."
+  indexes {
+    (warehouse_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "fct_inbound_receipts" {
+  "inbound_line_id" "integer"
+  "inbound_shipment_id" "integer"
+  "receipt_number" "varchar"
+  "shipment_status" "varchar"
+  "warehouse_id" "integer"
+  "warehouse_code" "varchar"
+  "supplier_id" "integer"
+  "supplier_name" "varchar"
+  "item_id" "integer"
+  "sku" "varchar"
+  "lot_number" "varchar"
+  "expected_at" "timestamp"
+  "received_at" "timestamp"
+  "arrival_delay_minutes" "bigint" [note: "Minutes between expected truck arrival and receiving finalization."]
+  "expected_qty" "decimal(12,3)"
+  "received_qty" "decimal(12,3)"
+  "variance_qty" "decimal(13,3)"
+  "receipt_fill_rate" "double" [note: "received_qty / expected_qty."]
+  "is_short_delivery" "boolean" [note: "Completed shipment where less was received than expected."]
+
+  Note: "One row per inbound shipment line with receiving variance and arrival delay."
+  indexes {
+    (inbound_line_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "fct_inventory_snapshot" {
+  "balance_id" "integer"
+  "location_id" "integer"
+  "location_code" "varchar"
+  "zone_type" "varchar"
+  "warehouse_id" "integer"
+  "warehouse_code" "varchar"
+  "is_sellable" "boolean"
+  "item_id" "integer"
+  "sku" "varchar"
+  "item_name" "varchar"
+  "min_stock_level" "integer"
+  "lot_id" "integer"
+  "lot_number" "varchar"
+  "expiration_date" "date"
+  "days_to_expiry" "bigint"
+  "quantity_on_hand" "decimal(12,3)"
+  "quantity_allocated" "decimal(12,3)"
+  "quantity_available" "decimal(13,3)"
+  "quantity_sellable" "decimal(13,3)" [note: "quantity_available when the bin is sellable, otherwise 0."]
+  "updated_at" "timestamp"
+  "item_total_sellable_qty" "decimal(38,3)" [note: "Sellable quantity for the item summed across all bins and warehouses."]
+  "is_item_below_min_stock" "boolean" [note: "item_total_sellable_qty is below the item's min_stock_level (reorder point)."]
+  "is_expiring_soon" "boolean" [note: "Lot expires within 60 days."]
+
+  Note: "Current stock per bin and lot, with sellable quantity and replenishment flags."
+  indexes {
+    (balance_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "fct_order_fulfillment" {
+  "fulfillment_key" "varchar" [note: "E-shop order_number, or the warehouse outbound order number for warehouse-only orders."]
+  "order_id" "integer"
+  "order_number" "varchar"
+  "customer_id" "integer"
+  "eshop_status" "varchar"
+  "ordered_at" "timestamp"
+  "total_amount" "decimal(10,2)"
+  "outbound_order_id" "integer"
+  "outbound_order_number" "varchar"
+  "external_order_ref" "varchar"
+  "warehouse_id" "integer"
+  "warehouse_code" "varchar"
+  "warehouse_status" "varchar"
+  "priority" "integer"
+  "warehouse_received_at" "timestamp"
+  "shipped_at" "timestamp"
+  "match_status" "varchar"
+  "order_to_warehouse_hours" "double" [note: "Hours from e-shop order placement to outbound order import in the warehouse."]
+  "order_to_ship_hours" "double" [note: "Hours from e-shop order placement to departure from the warehouse shipping dock."]
+  "status_issue" "varchar" [note: "Reason the e-shop and warehouse statuses disagree (NULL when consistent)."]
+  "needs_attention" "boolean"
+
+  Note: "E-shop orders matched to warehouse outbound orders on order_number = external_order_ref (full outer join), showing both lifecycle statuses side by side, lead times, and status inconsistencies.\n"
+  indexes {
+    (fulfillment_key) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "fct_order_items" {
+  "order_item_id" "integer"
+  "order_id" "integer"
+  "order_number" "varchar"
+  "customer_id" "integer"
+  "product_id" "integer"
+  "sku" "varchar"
+  "ordered_at" "timestamp"
+  "order_date" "date"
+  "order_status" "varchar"
+  "is_cancelled" "boolean"
+  "quantity" "integer"
+  "unit_price" "decimal(10,2)"
+  "line_amount" "decimal(18,2)"
+  "current_list_price" "decimal(10,2)"
+  "price_change_since_order" "decimal(11,2)" [note: "current_list_price - unit_price paid at checkout."]
+
+  Note: "One row per order line, with historical vs current price."
+  indexes {
+    (order_item_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "fct_orders" {
+  "order_id" "integer"
+  "order_number" "varchar"
+  "customer_id" "integer"
+  "shipping_address_id" "integer"
+  "ship_country" "varchar"
+  "ship_city" "varchar"
+  "order_status" "varchar"
+  "is_cancelled" "boolean"
+  "ordered_at" "timestamp"
+  "order_date" "date"
+  "line_count" "bigint"
+  "units_count" "hugeint"
+  "items_amount" "decimal(38,2)"
+  "shipping_cost" "decimal(10,2)"
+  "total_amount" "decimal(10,2)"
+  "is_total_consistent" "boolean" [note: "items_amount + shipping_cost equals the order header total_amount."]
+  "payment_attempts" "bigint"
+  "paid_amount" "decimal(38,2)" [note: "Sum of completed payments."]
+  "refunded_amount" "decimal(38,2)"
+  "outstanding_amount" "decimal(38,2)" [note: "total_amount - paid_amount."]
+  "is_fully_paid" "boolean"
+  "latest_payment_status" "varchar" [note: "Status of the most recently initiated payment attempt."]
+  "latest_payment_method" "varchar"
+  "last_paid_at" "timestamp"
+
+  Note: "One row per order with item, shipping and payment totals."
+  indexes {
+    (order_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "fct_outbound_fulfillment" {
+  "outbound_line_id" "integer"
+  "outbound_order_id" "integer"
+  "outbound_order_number" "varchar"
+  "external_order_ref" "varchar"
+  "outbound_status" "varchar"
+  "priority" "integer"
+  "warehouse_id" "integer"
+  "warehouse_code" "varchar"
+  "item_id" "integer"
+  "sku" "varchar"
+  "requested_qty" "decimal(12,3)"
+  "allocated_qty" "decimal(12,3)"
+  "picked_qty" "decimal(12,3)"
+  "allocation_rate" "double"
+  "fill_rate" "double" [note: "picked_qty / requested_qty."]
+  "is_fully_picked" "boolean"
+  "created_at" "timestamp"
+  "shipped_at" "timestamp"
+  "hours_to_ship" "double" [note: "Hours from outbound order import to departure from the shipping dock."]
+
+  Note: "One row per outbound order line with allocation and pick performance."
+  indexes {
+    (outbound_line_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "fct_payments" {
+  "payment_id" "integer"
+  "order_id" "integer"
+  "order_number" "varchar"
+  "customer_id" "integer"
+  "transaction_id" "varchar"
+  "payment_provider" "varchar"
+  "payment_method" "varchar"
+  "payment_status" "varchar"
+  "is_successful" "boolean"
+  "amount" "decimal(10,2)"
+  "currency" "varchar"
+  "initiated_at" "timestamp"
+  "paid_at" "timestamp"
+  "seconds_to_capture" "bigint" [note: "Seconds between payment initiation and capture (NULL if never captured)."]
+
+  Note: "One row per payment attempt."
+  indexes {
+    (payment_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "fct_stock_movements" {
+  "movement_id" "bigint"
+  "moved_at" "timestamp"
+  "movement_date" "date"
+  "movement_type" "varchar"
+  "item_id" "integer"
+  "sku" "varchar"
+  "lot_id" "integer"
+  "lot_number" "varchar"
+  "from_location_id" "integer"
+  "from_location_code" "varchar"
+  "to_location_id" "integer"
+  "to_location_code" "varchar"
+  "warehouse_id" "integer" [note: "Warehouse of the destination bin, or of the source bin for outbound and write-off movements."]
+  "warehouse_code" "varchar"
+  "quantity" "decimal(12,3)"
+  "stock_impact_qty" "decimal(13,3)" [note: "Change to total on-hand stock: positive for inbound receipts and positive adjustments, negative for outbound picks and negative adjustments, 0 for internal moves (putaway, transfer, replenishment).\n"]
+  "reference_doc" "varchar"
+  "performed_by" "varchar"
+
+  Note: "Stock movement ledger with SKU, bins and signed stock impact."
+  indexes {
+    (movement_id) [pk]
+  }
+}
+//--configured at schema: medallion.gold
+Table "mart_product_stock_reconciliation" {
+  "sku" "varchar"
+  "product_id" "integer"
+  "item_id" "integer"
+  "product_name" "varchar"
+  "category_path" "varchar"
+  "is_active" "boolean"
+  "storefront_stock_qty" "integer"
+  "warehouse_on_hand_qty" "decimal(38,3)"
+  "warehouse_allocated_qty" "decimal(38,3)"
+  "warehouse_sellable_qty" "decimal(38,3)" [note: "On-hand minus allocated, counted only in sellable bins."]
+  "min_stock_level" "integer"
+  "stock_diff_qty" "decimal(38,3)" [note: "storefront_stock_qty - warehouse_sellable_qty (positive means the storefront promises more than is available)."]
+  "reconciliation_status" "varchar"
+
+  Note: "Storefront products matched to warehouse items on SKU (full outer join), comparing storefront stock_quantity with the warehouse's sellable available quantity.\n"
+  indexes {
+    (sku) [pk]
+  }
+}
+//Refs (based on the DBT Relationship Tests)
+Ref: "dim_storage_locations"."warehouse_id" > "dim_warehouses"."warehouse_id"
+Ref: "fct_inbound_receipts"."warehouse_id" > "dim_warehouses"."warehouse_id"
+Ref: "fct_inbound_receipts"."supplier_id" > "dim_suppliers"."supplier_id"
+Ref: "fct_inbound_receipts"."item_id" > "dim_items"."item_id"
+Ref: "fct_inventory_snapshot"."location_id" > "dim_storage_locations"."location_id"
+Ref: "fct_inventory_snapshot"."warehouse_id" > "dim_warehouses"."warehouse_id"
+Ref: "fct_inventory_snapshot"."item_id" > "dim_items"."item_id"
+Ref: "fct_order_fulfillment"."order_id" - "fct_orders"."order_id"
+Ref: "fct_order_fulfillment"."customer_id" > "dim_customers"."customer_id"
+Ref: "fct_order_fulfillment"."warehouse_id" > "dim_warehouses"."warehouse_id"
+Ref: "fct_order_items"."order_id" > "fct_orders"."order_id"
+Ref: "fct_order_items"."customer_id" > "dim_customers"."customer_id"
+Ref: "fct_order_items"."product_id" > "dim_products"."product_id"
+Ref: "fct_orders"."customer_id" > "dim_customers"."customer_id"
+Ref: "fct_outbound_fulfillment"."warehouse_id" > "dim_warehouses"."warehouse_id"
+Ref: "fct_outbound_fulfillment"."item_id" > "dim_items"."item_id"
+Ref: "fct_payments"."order_id" > "fct_orders"."order_id"
+Ref: "fct_payments"."customer_id" > "dim_customers"."customer_id"
+Ref: "fct_stock_movements"."item_id" > "dim_items"."item_id"
+Ref: "fct_stock_movements"."from_location_id" > "dim_storage_locations"."location_id"
+Ref: "fct_stock_movements"."to_location_id" > "dim_storage_locations"."location_id"
+Ref: "fct_stock_movements"."warehouse_id" > "dim_warehouses"."warehouse_id"
+Ref: "mart_product_stock_reconciliation"."product_id" - "dim_products"."product_id"
+Ref: "mart_product_stock_reconciliation"."item_id" - "dim_items"."item_id"

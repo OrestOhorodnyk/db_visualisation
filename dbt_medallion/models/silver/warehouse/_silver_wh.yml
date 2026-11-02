@@ -5,9 +5,21 @@ models:
     description: Cleaned warehouse facilities.
     columns:
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: warehouse_code
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: warehouse_name
+        data_type: varchar
+      - name: warehouse_address
+        data_type: varchar
+      - name: is_active
+        data_type: boolean
+      - name: created_at
+        data_type: timestamp
 
   - name: slv_wh__warehouse_zones
     description: Cleaned functional zones inside warehouses.
@@ -17,15 +29,28 @@ models:
             column_name: "warehouse_id || '|' || zone_code"
     columns:
       - name: zone_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('slv_wh__warehouses')
                 field: warehouse_id
+      - name: zone_code
+        data_type: varchar
+      - name: zone_name
+        data_type: varchar
       - name: zone_type
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
@@ -36,43 +61,98 @@ models:
     description: Storage bins flattened with their zone and warehouse attributes.
     columns:
       - name: location_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: location_code
+        data_type: varchar
         data_tests: [unique, not_null]
+      - name: aisle
+        data_type: varchar
+      - name: rack
+        data_type: varchar
+      - name: level
+        data_type: varchar
+      - name: bin
+        data_type: varchar
+      - name: max_weight_kg
+        data_type: decimal(10,2)
+      - name: max_volume_m3
+        data_type: decimal(10,4)
+      - name: is_blocked
+        data_type: boolean
       - name: zone_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__warehouse_zones')
+            to_columns: [zone_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('slv_wh__warehouse_zones')
                 field: zone_id
+      - name: zone_code
+        data_type: varchar
+      - name: zone_name
+        data_type: varchar
       - name: zone_type
+        data_type: varchar
         data_tests:
           - accepted_values:
               arguments:
                 values: ["receiving", "bulk_storage", "picking", "cold_storage", "quarantine", "shipping"]
+      - name: warehouse_id
+        data_type: integer
+      - name: warehouse_code
+        data_type: varchar
+      - name: warehouse_name
+        data_type: varchar
+      - name: is_warehouse_active
+        data_type: boolean
       - name: is_sellable
         description: >
           True when stock in this bin can be promised to customers: the bin is not blocked, the warehouse
           is active, and the zone is bulk_storage, picking, or cold_storage.
+        data_type: boolean
         data_tests: [not_null]
 
   - name: slv_wh__items
     description: Cleaned warehouse item master with normalized SKU.
     columns:
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: sku
         description: Normalized SKU, the conformed key shared with e-shop `products.sku`.
+        data_type: varchar
         data_tests: [unique, not_null]
       - name: barcode
+        data_type: varchar
         data_tests: [unique]
+      - name: item_name
+        data_type: varchar
       - name: uom
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: ["pcs", "box", "pallet", "kg", "liter"]
+      - name: gross_weight_kg
+        data_type: decimal(10,3)
+      - name: volume_m3
+        data_type: decimal(10,6)
+      - name: min_stock_level
+        data_type: integer
+      - name: is_lot_tracked
+        data_type: boolean
+      - name: created_at
+        data_type: timestamp
 
   - name: slv_wh__item_lots
     description: Cleaned batch/lot records with expiry enrichment.
@@ -82,25 +162,51 @@ models:
             column_name: "item_id || '|' || lot_number"
     columns:
       - name: lot_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('slv_wh__items')
                 field: item_id
+      - name: lot_number
+        data_type: varchar
+      - name: manufactured_date
+        data_type: date
+      - name: expiration_date
+        data_type: date
       - name: days_to_expiry
         description: Days from today until expiration_date (negative when expired, NULL when no expiry).
+        data_type: bigint
       - name: is_expired
+        data_type: boolean
         data_tests: [not_null]
+      - name: created_at
+        data_type: timestamp
 
   - name: slv_wh__inventory_balances
     description: Stock balances per bin and lot with available quantity.
     columns:
       - name: balance_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: location_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__storage_locations')
+            to_columns: [location_id]
         data_tests:
           - not_null
           - relationships:
@@ -108,6 +214,11 @@ models:
                 to: ref('slv_wh__storage_locations')
                 field: location_id
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
@@ -115,30 +226,61 @@ models:
                 to: ref('slv_wh__items')
                 field: item_id
       - name: lot_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__item_lots')
+            to_columns: [lot_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('slv_wh__item_lots')
                 field: lot_id
+      - name: quantity_on_hand
+        data_type: decimal(12,3)
+      - name: quantity_allocated
+        data_type: decimal(12,3)
       - name: quantity_available
         description: quantity_on_hand - quantity_allocated.
+        data_type: decimal(13,3)
+      - name: updated_at
+        data_type: timestamp
 
   - name: slv_wh__suppliers
     description: Cleaned supplier master.
     columns:
       - name: supplier_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
+      - name: supplier_name
+        data_type: varchar
       - name: tax_id
+        data_type: varchar
         data_tests: [unique]
+      - name: contact_email
+        data_type: varchar
+      - name: phone
+        data_type: varchar
 
   - name: slv_wh__inbound_shipments
     description: Cleaned inbound shipment (ASN) headers.
     columns:
       - name: inbound_shipment_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: receipt_number
+        data_type: varchar
         data_tests: [unique, not_null]
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - not_null
           - relationships:
@@ -146,6 +288,11 @@ models:
                 to: ref('slv_wh__warehouses')
                 field: warehouse_id
       - name: supplier_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__suppliers')
+            to_columns: [supplier_id]
         data_tests:
           - not_null
           - relationships:
@@ -153,18 +300,33 @@ models:
                 to: ref('slv_wh__suppliers')
                 field: supplier_id
       - name: shipment_status
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: ["draft", "in_progress", "completed", "cancelled"]
+      - name: expected_at
+        data_type: timestamp
+      - name: received_at
+        data_type: timestamp
+      - name: created_at
+        data_type: timestamp
 
   - name: slv_wh__inbound_shipment_lines
     description: Cleaned inbound shipment lines with receiving variance.
     columns:
       - name: inbound_line_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: inbound_shipment_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__inbound_shipments')
+            to_columns: [inbound_shipment_id]
         data_tests:
           - not_null
           - relationships:
@@ -172,6 +334,11 @@ models:
                 to: ref('slv_wh__inbound_shipments')
                 field: inbound_shipment_id
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
@@ -179,22 +346,41 @@ models:
                 to: ref('slv_wh__items')
                 field: item_id
       - name: lot_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__item_lots')
+            to_columns: [lot_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('slv_wh__item_lots')
                 field: lot_id
+      - name: expected_qty
+        data_type: decimal(12,3)
+      - name: received_qty
+        data_type: decimal(12,3)
       - name: variance_qty
         description: received_qty - expected_qty (negative means short delivery).
+        data_type: decimal(13,3)
 
   - name: slv_wh__outbound_orders
     description: Cleaned outbound fulfillment order headers.
     columns:
       - name: outbound_order_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: outbound_order_number
+        data_type: varchar
         data_tests: [unique, not_null]
       - name: warehouse_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__warehouses')
+            to_columns: [warehouse_id]
         data_tests:
           - not_null
           - relationships:
@@ -203,25 +389,40 @@ models:
                 field: warehouse_id
       - name: external_order_ref
         description: Upstream order reference; e-shop order_number for storefront orders.
+        data_type: varchar
       - name: outbound_status
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: ["draft", "in_progress", "completed", "cancelled"]
       - name: priority
+        data_type: integer
         data_tests:
           - accepted_values:
               arguments:
                 values: [1, 2, 3, 4, 5]
                 quote: false
+      - name: shipped_at
+        data_type: timestamp
+      - name: created_at
+        data_type: timestamp
 
   - name: slv_wh__outbound_order_lines
     description: Cleaned outbound order lines.
     columns:
       - name: outbound_line_id
+        data_type: integer
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: outbound_order_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__outbound_orders')
+            to_columns: [outbound_order_id]
         data_tests:
           - not_null
           - relationships:
@@ -229,19 +430,38 @@ models:
                 to: ref('slv_wh__outbound_orders')
                 field: outbound_order_id
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
               arguments:
                 to: ref('slv_wh__items')
                 field: item_id
+      - name: requested_qty
+        data_type: decimal(12,3)
+      - name: allocated_qty
+        data_type: decimal(12,3)
+      - name: picked_qty
+        data_type: decimal(12,3)
 
   - name: slv_wh__stock_movements
     description: Cleaned immutable stock movement ledger.
     columns:
       - name: movement_id
+        data_type: bigint
+        constraints:
+          - type: primary_key
         data_tests: [unique, not_null]
       - name: item_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__items')
+            to_columns: [item_id]
         data_tests:
           - not_null
           - relationships:
@@ -249,24 +469,40 @@ models:
                 to: ref('slv_wh__items')
                 field: item_id
       - name: lot_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__item_lots')
+            to_columns: [lot_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('slv_wh__item_lots')
                 field: lot_id
       - name: from_location_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__storage_locations')
+            to_columns: [location_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('slv_wh__storage_locations')
                 field: location_id
       - name: to_location_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            to: ref('slv_wh__storage_locations')
+            to_columns: [location_id]
         data_tests:
           - relationships:
               arguments:
                 to: ref('slv_wh__storage_locations')
                 field: location_id
       - name: movement_type
+        data_type: varchar
         data_tests:
           - not_null
           - accepted_values:
@@ -280,4 +516,11 @@ models:
                   - adjustment_plus
                   - adjustment_minus
       - name: quantity
+        data_type: decimal(12,3)
         data_tests: [not_null]
+      - name: reference_doc
+        data_type: varchar
+      - name: performed_by
+        data_type: varchar
+      - name: moved_at
+        data_type: timestamp
