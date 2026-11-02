@@ -14,7 +14,7 @@ sequenceDiagram
     Conf->>GCR: 3. GET /?schema=gold_marts&showMode=ALL_FIELDS
     GCR->>Git: 4. Fetch raw schemas/gold_marts.dbml via Git API (if GITHUB_REPO is set)
     Git-->>GCR: Return DBML
-    Note over GCR: 5. Compare SHA-256 hash of the schema<br/>If changed: dbml_to_tbls.js + liam erd build --format tbls<br/>inside Cloud Run to generate schema.json
+    Note over GCR: 5. Compare SHA-256 hash of the schema<br/>If changed: dbml_to_tbls.py + liam erd build --format tbls<br/>inside Cloud Run to generate schema.json
     GCR-->>Conf: 6. Serve interactive Liam ERD SPA + schema.json
 ```
 
@@ -26,12 +26,12 @@ sequenceDiagram
 | :--- | :--- | :--- | :--- |
 | **[dbt Core](https://github.com/dbt-labs/dbt-core) + [dbt-duckdb](https://github.com/duckdb/dbt-duckdb)** | **Apache-2.0 / MIT** | ✅ Free | Source of truth for the data models (`dbt_medallion/`): SQL models, YAML docs and tests. `dbt docs generate` produces the `manifest.json` / `catalog.json` that the exporter reads. |
 | **[dbterd](https://github.com/datnguye/dbterd)** | **MIT** | ✅ Free | Generates the DBML schemas (`schemas/*.dbml`) from the dbt artifacts, using the model contract constraints for primary keys and relationships. Run by `dbt_medallion/scripts/export_erd.sh`. |
-| **[DBML (`@dbml/core`)](https://github.com/holistics/dbml)** | **Apache-2.0** | ✅ Free | Schema format stored in Git. `cloud_function/dbml_to_tbls.js` parses it with `@dbml/core` and converts it to tbls JSON for Liam. |
+| **[DBML](https://dbml.dbdiagram.io/) + [PyDBML](https://github.com/Vanderhoof/PyDBML)** | **MIT** | ✅ Free | Schema format stored in Git. `cloud_function/dbml_to_tbls.py` parses it with PyDBML and converts it to tbls JSON for Liam, inside the server process. |
 | **[tbls JSON format](https://github.com/k1LoW/tbls)** | **MIT** | ✅ Free | Intermediate format (tables, typed columns, comments, constraints and relations) that Liam reads with `--format tbls`. Generated inside the container, never committed. |
 | **[Liam ERD (`@liam-hq/cli`)](https://github.com/liam-hq/liam)** | **Apache-2.0** | ✅ Free | Open-source generator that builds an interactive web-based Entity-Relationship Diagram (SPA) from the tbls JSON schema. |
 | **[Python 3](https://www.python.org/) + [FastAPI](https://fastapi.tiangolo.com/)** | **PSF / MIT** | ✅ Free | Asynchronous Python web framework (`cloud_function/server.py`) powered by **Uvicorn** (BSD-3-Clause) and **HTTPX** (BSD-3-Clause) that dynamically fetches `.dbml` files from Git, caches builds by SHA-256 hash, isolates multiple schemas across Confluence `<iframe>` embeds, and injects hover tooltips. |
 | **[`uv` (`ghcr.io/astral-sh/uv:python3.12-alpine`)](https://docs.astral.sh/uv/)** | **Apache-2.0 / MIT** | ✅ Free | Base container image providing pinned Python 3.12 and high-performance `uv` dependency management (`pyproject.toml` & `uv.lock`) for both the server and the dbt project. |
-| **[Node.js (`nodejs` / `npm` on Alpine)](https://nodejs.org/)** | **MIT** | ✅ Free | Runtime inside the container used to execute `dbml_to_tbls.js` and the `@liam-hq/cli` CLI tool. |
+| **[Node.js (`nodejs` / `npm` on Alpine)](https://nodejs.org/)** | **MIT** | ✅ Free | Runtime inside the container used to execute the `@liam-hq/cli` CLI tool. |
 | **Docker Engine / CLI & Buildx** | **Apache-2.0** | ✅ Free* | Container build and runtime tools (*see note below on Docker Desktop vs. open-source runtimes*). |
 | **GCP Cloud Run & Cloud Build** | **Cloud Service (Pay-as-you-go)** | ✅ Free Tier / Paid | Serverless container runtime providing an HTTPS endpoint (`https://*.a.run.app`) that scales to zero when idle. |
 
@@ -60,7 +60,7 @@ db_visualisation/
 │   │   └── Dockerfile               # Production & local Docker image definition
 │   ├── pyproject.toml               # Python project metadata & dependencies (managed by uv)
 │   ├── uv.lock                      # Reproducible dependency lockfile
-│   ├── dbml_to_tbls.js              # DBML -> tbls JSON converter for Liam ERD
+│   ├── dbml_to_tbls.py              # DBML -> tbls JSON converter for Liam ERD (PyDBML)
 │   └── server.py                    # Async multi-schema FastAPI server
 ├── dbt_medallion/                   # dbt + DuckDB medallion project (source of truth for the ERDs)
 │   ├── seeds/                       # Dummy raw data (one CSV per source table)
@@ -145,7 +145,7 @@ uv run dbt docs generate --profiles-dir .      # writes target/manifest.json + t
 
 * Column types come from `catalog.json`, and descriptions come from the model YAML docs. Descriptions show as hover tooltips and in the details panel.
 * `primary_key` constraints become the table's primary key, and `foreign_key` constraints become relation lines.
-* The server converts each DBML file to tbls JSON (`cloud_function/dbml_to_tbls.js`) before running Liam. The relationship type follows the DBML ref:
+* The server converts each DBML file to tbls JSON (`cloud_function/dbml_to_tbls.py`) before running Liam. The relationship type follows the DBML ref:
 
   | Contract on the FK column | DBML ref | Drawn as |
   | :--- | :--- | :--- |
@@ -159,16 +159,37 @@ Commit the regenerated `schemas/*.dbml` files so the Cloud Run service can fetch
 
 ### Updating the Diagrams After dbt Model Changes
 
-The diagrams are drawn from the generated `schemas/*.dbml` files, not from dbt directly. After changing models, regenerate the files and commit them:
+The diagrams are drawn from the generated `schemas/*.dbml` files, not from dbt directly. After any model change, update the diagram in four steps.
+
+**Step 1: Update the model YAML.** Silver and gold models have enforced contracts, so the YAML must match the SQL. Every column needs a `data_type`, and keys need `primary_key` / `foreign_key` constraints (see [Model Contracts](#model-contracts-what-the-diagrams-are-drawn-from)). The table below lists what to update for each kind of change.
+
+**Step 2: Rebuild the models and regenerate the DBML:**
 
 ```bash
 cd dbt_medallion
 uv run dbt build --profiles-dir .           # build the changed models (and check their contracts and tests)
 uv run dbt docs generate --profiles-dir .   # refresh target/manifest.json + target/catalog.json
 ./scripts/export_erd.sh                     # rewrite ../schemas/*.dbml
-git add ../schemas && git commit -m "Update ERDs"
+```
+
+If `dbt build` fails with a contract error, the YAML columns or types don't match the SQL; fix the YAML and rerun.
+
+**Step 3: Check and commit the result:**
+
+```bash
+git diff -- ../schemas                      # review the changed tables, columns and refs
+git add ../schemas models && git commit -m "Update ERDs"
 git push
 ```
+
+**Step 4: Open the updated diagram.** What to do depends on where the server runs:
+
+| Where the diagram runs | What to do |
+| :--- | :--- |
+| Local container started with the `-v` mounts from [Run Locally](#2-run-locally-with-live-reload-on-refresh) | Refresh the browser. Add `&refresh=1` to the URL to skip the cache. |
+| Local container without the `-v` mounts | Rebuild and rerun the image: `docker build -f cloud_function/docker/Dockerfile -t erd-liam . && docker run --rm -p 3002:8080 erd-liam` |
+| Cloud Run with `GITHUB_REPO` / `GITLAB_PROJECT_ID` set | Nothing more after the push in step 3. The new version appears within `CACHE_TTL_SECONDS` (15 by default), or immediately with `&refresh=1`. |
+| Review before merging | Push to a branch and open `?schema=gold_marts&branch=feature/my-change`. |
 
 Every kind of model change needs this re-export:
 
@@ -180,10 +201,7 @@ Every kind of model change needs this re-export:
 | A new model in `models/gold/**` or `models/silver/{eshop,warehouse}/**` | Full contract YAML: every column with a `data_type`, plus its keys | A new table in that diagram, picked up automatically |
 | A new layer or folder you want as its own diagram | Add an `export_erd` line to `scripts/export_erd.sh` | A new `schemas/<name>.dbml` |
 
-How the change reaches the viewer:
-* **Local container:** started with the `-v` mounts from [Run Locally](#2-run-locally-with-live-reload-on-refresh), it reads `schemas/` straight from disk. Refresh the browser.
-* **Cloud Run:** no redeploy is needed. On each request the server fetches the file from Git, compares its SHA-256 hash, and rebuilds the diagram when it has changed. The change can take up to `CACHE_TTL_SECONDS` (15 by default) to appear. Add `&refresh=1` to the URL to force it.
-* **Feature branches:** `?branch=feat/my-change` renders the version on that branch, so a model change can be reviewed in Confluence before merging.
+How the change reaches the viewer: a local container with the `-v` mounts reads `schemas/` straight from disk. Cloud Run fetches the file from Git on each request, compares its SHA-256 hash, and rebuilds the diagram when it has changed, so no redeploy is needed.
 
 #### Do I need to rebuild the Docker image?
 
@@ -192,7 +210,7 @@ Not for model or diagram changes. Rebuild only when the server itself changes:
 | What changed | Local container (run with `-v` mounts) | Cloud Run (with `GITHUB_REPO` / `GITLAB_PROJECT_ID` set) |
 | :--- | :--- | :--- |
 | dbt models, so `schemas/*.dbml` is regenerated | Nothing to do: refresh the browser | Nothing to do: commit and push |
-| `cloud_function/server.py` or `cloud_function/dbml_to_tbls.js` | Restart the container (no auto-reload); no rebuild needed | Rebuild the image and redeploy |
+| `cloud_function/server.py` or `cloud_function/dbml_to_tbls.py` | Restart the container (no auto-reload); no rebuild needed | Rebuild the image and redeploy |
 | `Dockerfile`, `pyproject.toml` / `uv.lock`, Liam CLI version | Rebuild the image and re-run it | Rebuild the image and redeploy |
 
 You do need a rebuild after model changes in two cases:
@@ -232,7 +250,7 @@ Mount the local `schemas/` folder and `server.py` into the container. Re-running
 docker run --rm -p 3002:8080 \
   -v "$(pwd)/schemas:/app/schemas:ro" \
   -v "$(pwd)/cloud_function/server.py:/app/cloud_function/server.py:ro" \
-  -v "$(pwd)/cloud_function/dbml_to_tbls.js:/app/cloud_function/dbml_to_tbls.js:ro" \
+  -v "$(pwd)/cloud_function/dbml_to_tbls.py:/app/cloud_function/dbml_to_tbls.py:ro" \
   erd-liam
 ```
 

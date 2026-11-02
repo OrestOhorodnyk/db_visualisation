@@ -18,6 +18,8 @@ import uvicorn
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 
+from dbml_to_tbls import DbmlSyntaxError, dbml_to_tbls
+
 PORT = int(os.environ.get("PORT", "8080"))
 SCHEMAS_DIR = os.environ.get("SCHEMAS_DIR", "schemas").strip("/")
 LOCAL_ROOT_DIR = Path(
@@ -321,21 +323,14 @@ async def ensure_liam_build(
         tmp_work_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            tmp_dbml_path = tmp_work_dir / "schema.dbml"
             tmp_tbls_path = tmp_work_dir / "schema.tbls.json"
             tmp_dist_dir = tmp_work_dir / "dist"
-            converter_script = Path(__file__).resolve().parent / "dbml_to_tbls.js"
 
-            tmp_dbml_path.write_text(schema_content, encoding="utf-8")
-
-            rc, out, err = await run_cli_command(
-                ["node", str(converter_script), "schema.dbml", "schema.tbls.json"],
-                cwd=tmp_work_dir,
-            )
-            if rc != 0 or not tmp_tbls_path.is_file():
-                raise RuntimeError(
-                    f'DBML syntax error in "{file_path}":\n{out}\n{err}'.strip()
-                )
+            try:
+                tbls = await asyncio.to_thread(dbml_to_tbls, schema_content, schema_base_name)
+            except DbmlSyntaxError as exc:
+                raise RuntimeError(f'DBML syntax error in "{file_path}":\n{exc}') from exc
+            tmp_tbls_path.write_text(json.dumps(tbls, indent=2), encoding="utf-8")
 
             rc, out, err = await run_cli_command(
                 [
