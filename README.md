@@ -125,6 +125,50 @@ columns:
 * **One-to-one links:** add `config: {meta: {relationship_type: one-to-one}}` to the foreign key column (see `fct_order_fulfillment.order_id`). Without it, every foreign key is drawn as many-to-one.
 * **Self-references can't be drawn.** dbt treats a `foreign_key` constraint that refs its own model as a DAG cycle. So `slv_eshop__categories.parent_category_id` has only its `relationships` test, and that link is missing from `silver_eshop`.
 
+### Relationships and Granularity on the Diagram
+
+Liam ERD draws a line from the foreign key column of the child table to the key column of the parent table, with a marker at each end showing how many rows can be on that side. Which marker you get depends only on what's declared in the model YAML:
+
+| Relationship | Example | Drawn as | What to declare in dbt |
+| :--- | :--- | :--- | :--- |
+| One-to-many | one customer has many orders (`fct_orders.customer_id` -> `dim_customers`) | "one" marker at the parent, "many" (crow's foot) marker at the child | `foreign_key` constraint on the child column |
+| One-to-one | each order has at most one fulfillment row (`fct_order_fulfillment.order_id` -> `fct_orders`) | "one" marker at both ends | `foreign_key` constraint + `config: {meta: {relationship_type: one-to-one}}`, plus a `unique` test that proves it |
+| Many-to-many | orders contain many products, products appear in many orders | Not drawn directly. Model it as a bridge table with two one-to-many lines (`fct_orders` -< `fct_order_items` >- `dim_products`) | A bridge model with a `foreign_key` to each side |
+
+```yaml
+# One-to-one: fct_order_fulfillment.order_id
+- name: order_id
+  data_type: integer
+  constraints:
+    - type: foreign_key
+      to: ref('fct_orders')
+      to_columns: [order_id]
+  config:
+    meta:
+      relationship_type: one-to-one   # dbterd writes a "-" ref, so Liam draws one-to-one
+  data_tests: [unique]                # checks that the one-to-one claim holds
+```
+
+**Many-to-many.** Liam has no many-to-many line. `meta.relationship_type: many-to-many` makes dbterd write a `<>` ref, but Liam still draws it as one-to-many, so don't use it. Use a bridge table instead, as above.
+
+**Granularity (the grain of each table).** The diagram shows the grain through three things, all set in the model YAML:
+* **Primary key = the grain.** Declare the column (or columns) that identify one row. For a single column, use a column-level `primary_key` constraint. For a composite grain, such as one row per order and product, use a model-level constraint; the key icon then appears on both columns:
+
+  ```yaml
+  - name: fct_order_product
+    description: One row per order and product.
+    constraints:
+      - type: primary_key
+        columns: [order_id, product_id]
+  ```
+* **Model `description`** shows in the table's details panel. Start it with the grain ("One row per order line ...") so readers don't have to infer it from the keys.
+* **The "many" side is the finer grain.** Every fact should have a `foreign_key` to each dimension it joins to, so the fact sits on the "many" end of each line (`fct_order_items` -> `dim_products`, `dim_customers`, `fct_orders`).
+
+What the diagram doesn't show:
+* **Optional vs mandatory parents.** dbterd's DBML has no `not null` flag, so a nullable foreign key (e.g. `slv_eshop__orders.shipping_address_id`) looks the same as a mandatory one. Only primary key columns show as not nullable.
+* **Links to models outside the diagram.** A `foreign_key` to a model that isn't in the same export (for example, gold to silver) is dropped, because both ends must be in the same diagram.
+* **Self-references**, as described in [Model Contracts](#model-contracts-what-the-diagrams-are-drawn-from).
+
 ### Exporting ERDs (dbt -> DBML with dbterd)
 
 `scripts/export_erd.sh` runs [dbterd](https://dbterd.datnguyen.de/) with the `model_contract` algorithm. It reads `target/manifest.json` and `target/catalog.json` and writes one `schemas/<name>.dbml` per diagram:
@@ -145,15 +189,7 @@ uv run dbt docs generate --profiles-dir .      # writes target/manifest.json + t
 
 * Column types come from `catalog.json`, and descriptions come from the model YAML docs. Descriptions show as hover tooltips and in the details panel.
 * `primary_key` constraints become the table's primary key, and `foreign_key` constraints become relation lines.
-* The server converts each DBML file to tbls JSON (`cloud_function/dbml_to_tbls.py`) before running Liam. The relationship type follows the DBML ref:
-
-  | Contract on the FK column | DBML ref | Drawn as |
-  | :--- | :--- | :--- |
-  | `foreign_key` | `>` | one-to-many |
-  | `foreign_key` + `meta.relationship_type: one-to-one` | `-` | one-to-one (the converter adds the `UNIQUE` constraint Liam needs) |
-
-  Many-to-many is modelled as a bridge table with two one-to-many links (e.g. `fct_order_items`).
-* dbterd's DBML has no `unique` or `not null` flags, so only primary key columns show as not nullable.
+* The server converts each DBML file to tbls JSON (`cloud_function/dbml_to_tbls.py`) before running Liam. A `>` ref becomes one-to-many and a `-` ref becomes one-to-one; the converter adds the `UNIQUE` constraint Liam needs for one-to-one. See [Relationships and Granularity on the Diagram](#relationships-and-granularity-on-the-diagram).
 
 Commit the regenerated `schemas/*.dbml` files so the Cloud Run service can fetch them from Git.
 
